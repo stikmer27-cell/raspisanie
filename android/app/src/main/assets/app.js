@@ -2,16 +2,22 @@
 // здесь только показываем их и общаемся с Android через window.Android.
 import { STICKERS, ICONS } from './stickers.js';
 import { normGroup, nowTz, addDays, weekday, toMin, dayPlan, lateNote, toPair } from './engine.js';
-import { extrasFor, groupSubjects, materialsFor } from './extras.js';
+import { extrasFor, groupSubjects, materialsFor, groupMaterials } from './extras.js';
 import { newsHtml, sessionHtml, freshNewsCard, debtsPromptCard } from './sections.js';
+import { teacherKey, findTeacher, searchAll, searchShellHtml, searchResultsHtml, otherGroupBanner, teacherHtml, backLink } from './people.js';
 
 const $ = (s) => document.querySelector(s);
 const WD = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
 const WD_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const TABS = ['schedule', 'news', 'session', 'find'];
 
 const native = window.Android;
-const S = { cfg: {}, data: null, extras: null, group: null, sel: null, manual: false, loaded: false, tab: 'schedule', debtsEdit: false, draft: new Set() };
+const S = {
+  cfg: {}, data: null, extras: null, group: null, sel: null, manual: false, loaded: false, tab: 'schedule', debtsEdit: false, draft: new Set(),
+  // вкладка «Поиск»: что открыто (чужая группа или преподаватель), откуда пришли и выбранный там день
+  find: { q: '', view: null, back: [] }, osel: null, matsAll: false,
+};
 
 // ---------------------------------------------------------------- утилиты
 
@@ -290,6 +296,7 @@ window.onNative = async (type, arg) => {
 // ---------------------------------------------------------------- обновление приложения
 
 const hiddenAllow = () => { try { return localStorage.getItem('hideAllowInstall') === '1'; } catch { return false; } };
+const tipHidden = () => { try { return localStorage.getItem('tipTeacher') === '1'; } catch { return true; } };
 
 /**
  * Плашка сверху: скачана новая версия (сама поставится, когда выйдешь из приложения)
@@ -328,14 +335,14 @@ function updateState(u) {
 window.handleBack = () => {
   const open = [...document.querySelectorAll('dialog[open]')].pop();
   if (open) { closeSheet(open); return true; }
-  if (S.tab !== 'schedule' && S.cfg.group) { setTab('schedule'); return true; } // «Назад» с вкладки — к расписанию
+  if (S.tab === 'find' && S.find.view) { findBack(); return true; } // из группы/преподавателя туда, откуда пришёл
+  if (S.tab !== 'schedule' && S.cfg.group) { setTab('schedule'); return true; } // «Назад» с вкладки к расписанию
   return false;
 };
 
 // ---------------------------------------------------------------- дни
 
-function dayList() {
-  const g = S.data && S.data.groups[S.group];
+function dayList(g = S.data && S.data.groups[S.group]) {
   const { iso: today } = now();
   const set = new Set(Object.keys((g && g.days) || {}));
   set.add(today);
@@ -343,9 +350,8 @@ function dayList() {
   return [...set].filter((d) => weekday(d) !== 6 || (g && g.days[d] && g.days[d].length)).sort();
 }
 
-function defaultDay(days) {
+function defaultDay(days, g = S.data.groups[S.group]) {
   const { iso, min } = now();
-  const g = S.data.groups[S.group];
   const todays = active(g && g.days[iso]);
   // сегодняшний день показываем ещё час после последней пары, потом — следующий
   if (days.includes(iso) && todays.length && min < Math.max(...todays.map((l) => toMin(l.end || l.start))) + 60) return iso;
@@ -358,10 +364,55 @@ function relName(iso) {
 }
 
 function selectDay(d) {
-  if (!d || d === S.sel) return;
-  const dir = S.sel && d < S.sel ? 'left' : 'right';
-  S.sel = d;
+  const other = !!otherGroup();
+  const cur = other ? S.osel : S.sel;
+  if (!d || d === cur) return;
+  const dir = cur && d < cur ? 'left' : 'right';
+  if (other) S.osel = d; else S.sel = d;
   render(dir);
+}
+
+/** Чужая группа, открытая из поиска (своя при этом не меняется). */
+const otherGroup = () => (S.tab === 'find' && S.find.view && S.find.view.type === 'group' && S.data && S.data.groups[S.find.view.id]) || null;
+
+function recentFinds() {
+  try { return JSON.parse(localStorage.getItem('findRecent') || '[]'); } catch { return []; }
+}
+function rememberFind(r) {
+  try { localStorage.setItem('findRecent', JSON.stringify([r, ...recentFinds().filter((x) => !(x.type === r.type && x.id === r.id))].slice(0, 8))); } catch { /* приватный режим */ }
+}
+
+/** Открыть чужую группу или преподавателя (day: сразу на этот день). */
+function openFind(view, day) {
+  if (!S.data) return;
+  if (view.type === 'group' && view.id === S.group) { // своя группа: просто расписание
+    if (day) S.sel = day;
+    S.find.back = [];
+    S.tab = 'schedule';
+    window.scrollTo(0, 0);
+    render('fade');
+    return;
+  }
+  if (view.type === 'teacher') { const t = findTeacher(S.data, view.id); if (t) view = { type: 'teacher', id: t.key }; }
+  const label = view.type === 'group' ? (S.data.groups[view.id] || {}).name : (findTeacher(S.data, view.id) || {}).name;
+  if (!label) { toast('На этой неделе в расписании не нашлось'); return; }
+  S.find.back.push({ tab: S.tab, view: S.find.view, osel: S.osel });
+  if (S.find.back.length > 20) S.find.back.shift();
+  S.tab = 'find';
+  S.find.view = view;
+  if (view.type === 'group') S.osel = day || null;
+  rememberFind({ type: view.type, id: view.id, label });
+  if (view.type === 'teacher') { try { localStorage.setItem('tipTeacher', '1'); } catch { /* */ } } // уже нашёл, подсказка не нужна
+  if (document.activeElement) document.activeElement.blur(); // убрать клавиатуру
+  window.scrollTo(0, 0);
+  render('fade');
+}
+
+function findBack() {
+  const prev = S.find.back.pop();
+  if (prev) { S.tab = prev.tab; S.find.view = prev.view; S.osel = prev.osel; } else S.find.view = null;
+  window.scrollTo(0, 0);
+  render('fade');
 }
 
 // ---------------------------------------------------------------- отрисовка
@@ -462,6 +513,10 @@ function chooseGroup(norm) {
   readCfg();
   S.group = norm;
   S.sel = null;
+  // после смены своей группы показываем её расписание
+  S.tab = 'schedule';
+  S.find.view = null;
+  S.find.back = [];
   document.body.classList.remove('onboard');
   closeSheet($('#groupDlg'));
   render('fade');
@@ -480,9 +535,14 @@ function render(anim) {
   const view = $('#view');
   const ex = extrasState();
   renderTabs(ex);
-  document.body.classList.toggle('tab-other', S.tab !== 'schedule');
+  document.body.classList.toggle('tab-other', S.tab !== 'schedule' && !otherGroup());
 
-  // вкладки «Новости» и «Сессия»
+  // вкладки «Поиск», «Новости» и «Сессия»
+  if (S.tab === 'find') {
+    renderFind(view, anim);
+    renderFoot();
+    return;
+  }
   if (S.tab === 'news') {
     if (setHtml(view, 'view', newsHtml(ex.mine.news, { unread: ex.unreadNews, today: ex.today, loaded: !!S.extras }), !!anim)) animate(view, anim);
     saveSet('newsRead', new Set([...(readSet('newsRead') || []), ...ex.newsKeys])); // открыл — значит, видел
@@ -491,7 +551,8 @@ function render(anim) {
   }
   if (S.tab === 'session') {
     const debts = S.cfg.debts || [];
-    const html = sessionHtml(ex.mine, { debts, subjects: groupSubjects(S.data, S.group, ex.mine.questions), editing: S.debtsEdit, draft: S.draft, unseen: ex.unseenSess, today: ex.today, loaded: !!S.extras });
+    const mats = { mine: groupMaterials(S.data, S.group, ex.mine.materials), showAll: S.matsAll };
+    const html = sessionHtml(ex.mine, { debts, subjects: groupSubjects(S.data, S.group, ex.mine.questions), editing: S.debtsEdit, draft: S.draft, unseen: ex.unseenSess, today: ex.today, loaded: !!S.extras, mats });
     if (setHtml(view, 'view', html, !!anim)) animate(view, anim);
     saveSet('sessionSeen', new Set([...(readSet('sessionSeen') || []), ...ex.sessKeys]));
     renderFoot();
@@ -514,30 +575,82 @@ function render(anim) {
     return;
   }
 
-  const days = dayList();
-  if (!S.sel || !days.includes(S.sel)) S.sel = defaultDay(days);
+  const days = dayList(g);
+  if (!S.sel || !days.includes(S.sel)) S.sel = defaultDay(days, g);
   const { iso: today } = now();
-  setHtml($('#days'), 'days', days.map((d) => {
-    const ls = g.days[d];
-    const plan = ls ? dayPlan(ls) : null;
-    const cnt = ls === undefined ? '?' : pairDots(ls);
-    const cls = ['day', 'press', d === today && 'today', d === S.sel && 'sel', ls === undefined && 'missing'].filter(Boolean).join(' ');
-    const label = `${WD[weekday(d)]} ${dayNum(d)} ${monthName(d)}${plan ? `, ${toPair(plan.first)}, ${pairsWord(plan.count)}` : ''}`;
-    return `<button class="${cls}" data-day="${d}" aria-pressed="${d === S.sel}" aria-label="${esc(label)}">
-      <span class="wd">${WD_SHORT[weekday(d)]}</span><span class="dn">${dayNum(d)}</span><span class="cnt">${cnt}</span></button>`;
-  }).join(''), !!anim);
-  const selBtn = document.querySelector(`.day[data-day="${S.sel}"]`);
-  if (selBtn && anim) selBtn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  renderDays(g, days, S.sel, anim);
 
   // над расписанием: свежая новость и вопрос «остались долги?» после выкладки пересдач
   let top = freshNewsCard(ex.mine.news, ex.unreadNews, today, addDays(today, -1));
   const retakes = ex.mine.session.filter((f) => f.kind === 'retake').map((f) => f.url).sort().join('|');
   if (retakes && S.cfg.debtsAsked !== retakes && !(S.cfg.debts || []).length) top += debtsPromptCard();
 
-  // раз в 30 секунд экран пересчитывается — но в DOM уходит, только если что-то правда поменялось
-  if (setHtml(view, 'view', top + dayHtml(g, S.sel), !!anim)) animate(view, anim);
+  // один раз подсказываем, что фамилия преподавателя нажимается
+  let tip = '';
+  if (!tipHidden() && active(g.days[S.sel]).some((l) => l.teacher)) {
+    tip = `<div class="note-card tip">${ICONS.user}<div><b>Нажми на фамилию преподавателя</b>
+      <span>Покажу, где и когда у него пары на этой неделе. А расписание другой группы есть во вкладке «Поиск».</span>
+      <div class="row"><button type="button" class="btn secondary press" data-act="hide-tip">Понятно</button></div></div></div>`;
+  }
+  // раз в 30 секунд экран пересчитывается, но в DOM уходит, только если что-то правда поменялось
+  if (setHtml(view, 'view', top + dayHtml(g, S.sel) + tip, !!anim)) animate(view, anim);
   renderFoot();
 }
+
+/** Полоса дней недели с точками-парами. */
+function renderDays(g, days, sel, anim) {
+  const { iso: today } = now();
+  setHtml($('#days'), 'days', days.map((d) => {
+    const ls = g.days[d];
+    const plan = ls ? dayPlan(ls) : null;
+    const cnt = ls === undefined ? '?' : pairDots(ls);
+    const cls = ['day', 'press', d === today && 'today', d === sel && 'sel', ls === undefined && 'missing'].filter(Boolean).join(' ');
+    const label = `${WD[weekday(d)]} ${dayNum(d)} ${monthName(d)}${plan ? `, ${toPair(plan.first)}, ${pairsWord(plan.count)}` : ''}`;
+    return `<button class="${cls}" data-day="${d}" aria-pressed="${d === sel}" aria-label="${esc(label)}">
+      <span class="wd">${WD_SHORT[weekday(d)]}</span><span class="dn">${dayNum(d)}</span><span class="cnt">${cnt}</span></button>`;
+  }).join(''), !!anim);
+  const selBtn = document.querySelector(`.day[data-day="${sel}"]`);
+  if (selBtn && anim) selBtn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+}
+
+/** Вкладка «Поиск»: строка поиска, чужая группа или преподаватель. */
+function renderFind(view, anim) {
+  const v = S.find.view;
+  if (!S.data) {
+    if (setHtml(view, 'view', empty('load', 'Загружаю расписание', 'Как только скачаю расписание всех курсов, здесь можно будет искать группы и преподавателей.'), !!anim)) animate(view, anim);
+    return;
+  }
+  const og = otherGroup();
+  if (og) {
+    const days = dayList(og);
+    if (!S.osel || !days.includes(S.osel)) S.osel = defaultDay(days, og);
+    renderDays(og, days, S.osel, anim);
+    const mine = S.data.groups[S.group];
+    const html = backLink() + otherGroupBanner(og.name, mine ? mine.name : S.cfg.group || '') + dayHtml(og, S.osel);
+    if (setHtml(view, 'view', html, !!anim)) animate(view, anim);
+    return;
+  }
+  if (v && v.type === 'teacher') {
+    const { iso: today, min } = now();
+    const html = backLink() + teacherHtml(findTeacher(S.data, v.id), { today, min, kindPill });
+    if (setHtml(view, 'view', html, !!anim)) animate(view, anim);
+    return;
+  }
+  // строку поиска не пересоздаём, пока она на экране: иначе фоновое обновление сбило бы набор текста
+  const fresh = setHtml(view, 'view', searchShellHtml(), !!anim && !$('#searchInput'));
+  if (fresh) { animate(view, anim); $('#searchInput').value = S.find.q; }
+  renderFindResults(fresh);
+}
+
+function renderFindResults(force = false) {
+  const box = $('#searchResults');
+  if (!box) return;
+  // недавние: только те, что есть в расписании этой недели
+  const recent = recentFinds().filter((r) => (r.type === 'group' ? S.data.groups[r.id] : findTeacher(S.data, r.id)));
+  setHtml(box, 'results', searchResultsHtml(searchAll(S.data, S.find.q), recent, S.find.q), force);
+}
+
+const kindPill = (kind) => { const k = kindInfo(kind); return k ? `<span class="pill ${k[0]}">${esc(k[1])}</span>` : ''; };
 
 /** Нижние вкладки: какая выбрана и сколько нового. */
 function renderTabs(ex) {
@@ -553,7 +666,13 @@ function renderTabs(ex) {
 }
 
 function setTab(tab) {
-  if (!['schedule', 'news', 'session'].includes(tab) || tab === S.tab) return;
+  if (!TABS.includes(tab)) return;
+  S.find.back = [];
+  if (tab === S.tab) {
+    // повторное нажатие на «Поиск» возвращает к строке поиска
+    if (tab === 'find' && S.find.view) { S.find.view = null; window.scrollTo(0, 0); render('fade'); }
+    return;
+  }
   S.tab = tab;
   S.debtsEdit = false;
   window.scrollTo(0, 0);
@@ -676,11 +795,14 @@ function lessonCard(l, isToday, min, isNext, i) {
   const kind = kindInfo(l.kind);
   const meta = [
     kind && `<span class="pill ${kind[0]}">${esc(kind[1])}</span>`,
-    l.teacher && `<span class="ic">${ICONS.user}${esc(l.teacher)}</span>`,
+    // фамилия нажимается: где у этого преподавателя ещё пары на неделе
+    l.teacher && (l.pairs.length && !l.cancelled
+      ? `<button type="button" class="ic tlink press" data-open-teacher="${esc(teacherKey(l.teacher))}" aria-label="${esc(l.teacher)}: все пары преподавателя">${ICONS.user}${esc(l.teacher)}</button>`
+      : `<span class="ic">${ICONS.user}${esc(l.teacher)}</span>`),
     l.room && `<span class="ic room">${ICONS.pin}${esc(l.room)}</span>`,
     // пособия колледжа по этому предмету (с сайта)
     ...materialsFor(l.subject, (S.extras && S.extras.materials) || []).slice(0, 2).map((m) =>
-      `<button type="button" class="ic mat press" data-act="open-url" data-url="${esc(m.url)}">${ICONS.book}${esc(m.title.replace(/^учебн\S*\s+(методическ\S*\s+)?пособие\s*/i, ''))}</button>`),
+      `<button type="button" class="ic mat press" data-act="open-url" data-url="${esc(m.url)}" aria-label="Пособие: ${esc(m.title)}">${ICONS.book}<span class="mt">${esc(m.title.replace(/^учебн\S*\s+(методическ\S*\s+)?пособие\s*/i, ''))}</span></button>`),
   ].filter(Boolean).join('');
   return `<article class="${cls.filter(Boolean).join(' ')}" style="--i:${i}">
     <div class="when"><div class="num">${num}</div><div class="t">${time}</div></div>
@@ -818,6 +940,10 @@ document.addEventListener('click', (e) => {
     render(null);
     return;
   }
+  const openGroup = e.target.closest('[data-open-group]');
+  if (openGroup) { openFind({ type: 'group', id: openGroup.dataset.openGroup }, openGroup.dataset.day); return; }
+  const openTeacher = e.target.closest('[data-open-teacher]');
+  if (openTeacher) { openFind({ type: 'teacher', id: openTeacher.dataset.openTeacher }); return; }
   const grp = e.target.closest('[data-group], [data-pick]');
   if (grp) { chooseGroup(grp.dataset.group || grp.dataset.pick); return; }
   const act = e.target.closest('[data-act]');
@@ -831,7 +957,10 @@ document.addEventListener('click', (e) => {
   else if (a === 'notif') native.requestNotifications();
   else if (a === 'battery') native.openBatterySettings();
   else if (a === 'test') { native.testNotification(); toast('Сейчас придёт тестовое уведомление'); }
-  else if (a === 'open-url') native.openUrl(act.dataset.url)
+  else if (a === 'open-url') native.openUrl(act.dataset.url);
+  else if (a === 'find-back') findBack();
+  else if (a === 'hide-tip') { try { localStorage.setItem('tipTeacher', '1'); } catch { /* */ } render(null); }
+  else if (a === 'mats-all') { S.matsAll = !S.matsAll; render(null); }
   else if (a === 'debts-edit' || a === 'debts-mark') {
     S.draft = new Set(S.cfg.debts || []);
     S.debtsEdit = true;
@@ -864,11 +993,25 @@ document.addEventListener('click', (e) => {
 $('#groupBtn').addEventListener('click', openGroups);
 // «Другой предмет» в списке долгов
 document.addEventListener('submit', (e) => {
+  if (e.target.id === 'searchForm') {
+    // «Найти» на клавиатуре: если нашлось ровно одно, сразу открыть
+    e.preventDefault();
+    const res = searchAll(S.data, S.find.q);
+    if (res.groups.length + res.teachers.length === 1) {
+      openFind(res.groups.length ? { type: 'group', id: res.groups[0].norm } : { type: 'teacher', id: res.teachers[0].key });
+    } else if (document.activeElement) document.activeElement.blur();
+    return;
+  }
   if (!e.target.matches('[data-form="debt-add"]')) return;
   e.preventDefault();
   const input = $('#debtOther');
   const v = input.value.trim().replace(/\s+/g, ' ');
   if (v.length >= 2) { S.draft.add(v[0].toUpperCase() + v.slice(1)); render(null); }
+});
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'searchInput') return;
+  S.find.q = e.target.value;
+  renderFindResults();
 });
 $('#themeBtn').addEventListener('click', (e) => setTheme(isDark() ? 'light' : 'dark', e.currentTarget));
 $('#groupSearch').addEventListener('input', (e) => fillGroups(e.target.value));
@@ -909,9 +1052,13 @@ document.addEventListener('touchend', (e) => {
     } else {
       pull.style.height = '0';
     }
-  } else if (mode === 'x' && Math.abs(dx) > 60 && S.tab === 'schedule' && S.data && S.data.groups[S.group]) {
-    const days = dayList();
-    const i = days.indexOf(S.sel) + (dx < 0 ? 1 : -1);
+  } else if (mode === 'x' && Math.abs(dx) > 60 && S.data) {
+    // свайп по дням: в своём расписании и в открытой чужой группе
+    const og = otherGroup();
+    const g = og || (S.tab === 'schedule' && S.data.groups[S.group]);
+    if (!g) return;
+    const days = dayList(g);
+    const i = days.indexOf(og ? S.osel : S.sel) + (dx < 0 ? 1 : -1);
     if (i >= 0 && i < days.length) selectDay(days[i]);
   }
 }, { passive: true });

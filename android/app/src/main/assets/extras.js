@@ -199,13 +199,44 @@ const TOPIC_SUBJECTS = [[/тригонометр|логарифм/, (s) => /^м�
 
 /** Пособия колледжа, подходящие к предмету пары. */
 export function materialsFor(subject, materials) {
-  const s = lower(subject);
-  if (!s) return [];
+  // «Математика: тема занятия» — пособие ищем по самому предмету
+  const s = lower(String(subject || '').split(': ')[0]).trim();
+  if (s.length < 4) return [];
   return (materials || []).filter((m) => {
     const t = lower(m.title);
     if (t.includes(s)) return true;
     return TOPIC_SUBJECTS.some(([re, fits]) => re.test(t) && fits(s) && !/рекомендац/.test(t));
   });
+}
+
+/**
+ * Пособия для группы: к её предметам из расписания, плюс рекомендации по курсовой, если в
+ * расписании есть курсовая, и по выпускной работе, если есть преддипломная практика.
+ * [{...пособие, subject: к какому предмету}], в порядке списка на сайте.
+ */
+export function groupMaterials(data, group, materials) {
+  const g = data && data.groups && data.groups[normGroup(group)];
+  const subjects = new Set();
+  let all = '';
+  for (const ls of Object.values((g && g.days) || {})) {
+    for (const l of ls) {
+      if (!l.pairs.length || l.cancelled) continue;
+      if (l.subject) subjects.add(l.subject.split(': ')[0]);
+      all += ' ' + lower(l.text);
+    }
+  }
+  const out = [];
+  for (const m of materials || []) {
+    const t = lower(m.title);
+    // сначала точное совпадение названия предмета, потом по теме («Тригонометрия» к математике)
+    const exact = [...subjects].find((s) => s.length >= 4 && t.includes(lower(s)));
+    const topic = exact ? null : [...subjects].find((s) => materialsFor(s, [m]).length);
+    if (exact) out.push({ ...m, subject: exact });
+    else if (topic) out.push({ ...m, subject: topic, byTopic: true });
+    else if (/курсов/.test(t) && /рекомендац/.test(t) && /курсов/.test(all)) out.push({ ...m, subject: 'курсовая' });
+    else if (/выпускн|квалификационн/.test(t) && /преддиплом|выпускн|квалификационн/.test(all)) out.push({ ...m, subject: 'выпускная работа' });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- сбор и уведомления

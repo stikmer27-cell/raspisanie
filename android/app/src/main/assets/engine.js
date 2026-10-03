@@ -126,6 +126,8 @@ export function splitLesson(text) {
   let subject = body, kind = '', rest = '';
   const m = /^([^()]+?)\s*\(([^)]*)\)\.?\s*(.*)$/.exec(body);
   if (m) [subject, kind, rest] = [m[1].trim(), stripChars(m[2], ' ('), m[3].trim()];
+  // в PDF бывает название, набранное дважды подряд: «Разработка программных модулейРазработка программных модулей»
+  if (m) subject = subject.replace(/^(\S.{5,}?)\s*\1$/u, '$1');
   else {
     // «Лекция ИНФОРМАТИКА Читальный зал-А Белякова М.А.» — вид занятия впереди, без скобок
     const k = KIND_LEAD_RE.exec(body);
@@ -949,7 +951,7 @@ export function findSources(html) {
  * Версия разбора. Меняется при любом исправлении разбора PDF: старые результаты из кэша
  * (разобранные прошлой версией приложения) тогда выбрасываются и всё разбирается заново.
  */
-export const PARSER_VERSION = 5;
+export const PARSER_VERSION = 6;
 
 /**
  * Скачивает страницу и PDF, собирает расписание всех групп.

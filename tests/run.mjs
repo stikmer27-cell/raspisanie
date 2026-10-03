@@ -84,7 +84,17 @@ console.log('2б. Трудные места PDF');
     ['Тестирование ауд. 314, 310 психолог Семенова Н.Е. Явка обязательна!', 'Тестирование психолог Явка обязательна! |  | Семенова Н.Е. | 314, 310'],
     ['отмена Русский язык (Практические занятия). Клюшова Е.В. 233', 'Русский язык | Практические занятия | Клюшова Е.В. | 233'],
     ['Разработка прикладных приложений ( (Лекция) Рогулин В. 102', 'Разработка прикладных приложений | Лекция | Рогулин В. | 102'],
+    // в PDF название набрано дважды подряд
+    ['Разработка программных модулейРазработка программных модулей (курсовой проект) Белова И.Н. 306', 'Разработка программных модулей | курсовой проект | Белова И.Н. | 306'],
   ]) ok(S(text) === want, `поля: «${text.slice(0, 50)}…»`, S(text));
+  // ни в одном PDF нет задвоенных названий предметов
+  const doubled = [];
+  for (const [f, res] of Object.entries(parsed)) {
+    for (const [g, grp] of Object.entries(res.groups)) {
+      for (const [d, ls] of Object.entries(grp.days)) for (const l of ls) if (/^(\S.{5,}?)\s*\1$/u.test(l.subject)) doubled.push(`${f} ${g} ${d}: ${l.subject}`);
+    }
+  }
+  ok(!doubled.length, 'нет задвоенных названий предметов', doubled.slice(0, 3).join('; '));
   // случайный «\» в пустой ячейке — не пара
   const b2 = pick('2-2-kurs-BO-0310.pdf', '2507б2', '2026-10-03');
   ok(!at(b2, 1).length && b2.every((l) => /[а-яё]{3}/i.test(l.text)), 'случайный символ в пустой ячейке — не пара', JSON.stringify(b2.map((l) => `${l.pairs}:${l.text}`)));
@@ -233,6 +243,17 @@ console.log('4в. Новости и сессия');
     'группа 2507в1: её пересдачи (по группам внутри PDF) и вопросы к зачётам', JSON.stringify(other.questions.slice(0, 2)));
   ok(X.materialsFor('Математика', materials).length === 2 && !X.materialsFor('Программирование микроконтроллеров', materials).length && X.materialsFor('Основы алгоритмизации и программирования', materials).length >= 1,
     'пособия подбираются к своим предметам');
+  ok(X.materialsFor('Математика: Тригонометрические функции', materials).length === 2, 'пособия: тема занятия после двоеточия не мешает');
+  // пособия для группы: только к её предметам; по курсовой, только если в расписании есть курсовая
+  const lesson = (subject, kind = '') => ({ pairs: [1], start: '09:00', end: '10:35', text: `${subject} (${kind})`, cancelled: false, subject, kind, teacher: '', room: '' });
+  const gm = (lessons) => X.groupMaterials({ groups: { '2601а1': { name: '2601а1', days: { '2026-10-01': lessons } } } }, '2601а1', materials).map((m) => `${m.subject}${m.byTopic ? '~' : ''}: ${m.title}`);
+  const algo = gm([lesson('Основы алгоритмизации и программирования', 'Лекция')]);
+  ok(algo.some((s) => s.startsWith('Основы алгоритмизации и программирования: Учебное методическое пособие')) && algo.every((s) => s.startsWith('Основы алгоритмизации')),
+    'пособия группы: к её предмету (точное название и по теме)', algo.join(' | '));
+  ok(!gm([lesson('Физическая культура')]).length, 'пособия группы: нет подходящих, значит пусто (остальные по кнопке)');
+  ok(gm([lesson('Разработка программных модулей', 'Курсовая работа')]).some((s) => s.startsWith('курсовая: Методические рекомендации по выпол')),
+    'пособия группы: рекомендации по курсовой, если в расписании есть курсовая');
+  ok(!gm([lesson('Математика')]).some((s) => /Методические/.test(s)), 'пособия группы: без курсовой рекомендации не показываются');
 
   // уведомления: первый раз — тишина; потом новая новость и новые вопросы для группы — приходят
   let st = {};
@@ -248,6 +269,50 @@ console.log('4в. Новости и сессия');
   ok(r.messages.length === 0, 'повторно не присылает');
   r = X.decideExtras({ extras: ex2, data, state: r.state, cfg: { group: '2601а1' }, today: '2026-10-04' });
   ok(r.messages.length === 0, 'после смены группы — без старых уведомлений');
+}
+
+// ---------------------------------------------------------------- 4г. поиск: другая группа и преподаватель
+console.log('4г. Поиск групп и преподавателей');
+{
+  const P = await import('file://' + path.join(HERE, '..', 'android', 'app', 'src', 'main', 'assets', 'people.js').replace(/\\/g, '/'));
+  // все курсы вместе, как в schedule.json
+  const data = { groups: {} };
+  for (const f of files) if (f !== '2-2-kurs-BO-0310.pdf') Object.assign(data.groups, parsed[f].groups);
+  ok(P.teacherKey('Пауль С. А.') === P.teacherKey('Пауль С.А.') && P.teacherKey('Пауль С.А.') === 'пауль са', 'преподаватель: «Пауль С. А.» и «Пауль С.А.» один человек');
+  const idx = P.teacherIndex(data);
+  // ничего не потеряно: каждая пара каждой группы есть у своего преподавателя
+  let want = 0, got = 0;
+  for (const g of Object.values(data.groups)) for (const ls of Object.values(g.days)) for (const l of ls) if (l.teacher && l.pairs.length && !l.cancelled) want++;
+  for (const t of idx.values()) for (const l of t.lessons) got += l.groups.length;
+  ok(want > 500 && want === got, 'у преподавателей все пары всех групп, без потерь и повторов', `${got} из ${want}`);
+  // поток: одна лекция у нескольких групп одной записью
+  const paul = P.findTeacher(data, 'пауль са');
+  const lect = paul && paul.lessons.find((l) => l.date === '2026-09-30' && l.pairs.join() === '3');
+  ok(!!lect && lect.room === '414' && ['2507са1', '2507са2', '2507сб1', '2507сб2'].every((g) => lect.groups.some((x) => normGroup(x) === g)),
+    'лекция на поток: одна запись со всеми группами', lect && JSON.stringify(lect.groups));
+  // опечатки в фамилии в PDF склеиваются, а «Литвинов» и «Литвинова» остались бы разными людьми
+  const lit = P.findTeacher(data, P.teacherKey('Литвинва О.В.'));
+  ok(!!lit && lit.name === 'Литвинова О.В.' && P.findTeacher(data, P.teacherKey('Литвиновв О.В.')) === lit, 'опечатки в фамилии: пары у одного преподавателя', lit && `${lit.name} ${lit.aliases}`);
+  const fake = { groups: { a: { name: 'a', days: { '2026-10-01': [
+    { pairs: [1], start: '09:00', end: '10:35', subject: 'А', teacher: 'Литвинов О.В.', room: '1', cancelled: false },
+    { pairs: [2], start: '10:45', end: '12:20', subject: 'Б', teacher: 'Литвинова О.В.', room: '2', cancelled: false },
+  ] } } } };
+  ok(P.teacherIndex(fake).size === 2, '«Литвинов» и «Литвинова» не склеиваются');
+  ok(P.findTeacher(data, P.teacherKey('Рогулин В.')) === P.findTeacher(data, P.teacherKey('Рогулин В.Ю.')), 'без второго инициала: тот же преподаватель');
+  // поиск
+  const s1 = P.searchAll(data, '2507С');
+  ok(s1.groups.length === 4 && !s1.teachers.length, 'поиск группы по началу номера', s1.groups.map((g) => g.name).join(','));
+  const s2 = P.searchAll(data, 'пауль с.а');
+  ok(s2.teachers.length === 1 && s2.teachers[0].key === 'пауль са' && !s2.groups.length, 'поиск преподавателя по фамилии с инициалами');
+  ok(P.searchAll(data, 'литвинва').teachers[0] === lit, 'поиск и по написанию с опечаткой');
+  // где сейчас / ближайшая пара
+  ok(P.teacherNow(paul, '2026-09-30', 11 * 60).l.groups.some((g) => normGroup(g) === '2507са1') && P.teacherNow(paul, '2026-09-30', 11 * 60).kind === 'now',
+    'преподаватель: «сейчас на паре» в среду в 11:00');
+  const nx = P.teacherNow(paul, '2026-09-30', 12 * 60 + 30);
+  ok(nx.kind === 'next' && nx.l.start === '13:00' && nx.l.room === '414', 'преподаватель: ближайшая пара после перерыва', JSON.stringify(nx));
+  // разметка: без длинных тире в своих текстах
+  const html = P.searchShellHtml() + P.teacherHtml(paul, { today: '2026-09-30', min: 600 }) + P.otherGroupBanner('2507са1', '2507сб1') + P.searchResultsHtml(s2, [], 'пауль');
+  ok(!/—/.test(html.replace(/Учебная практика —/g, '')), 'тексты поиска без длинных тире');
 }
 
 // ---------------------------------------------------------------- 4б. старый WebView

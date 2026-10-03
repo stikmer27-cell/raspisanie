@@ -220,7 +220,7 @@ main { padding: 4px 16px 8px; min-height: 60vh; position: relative; }
 .day-head .sum:empty { display: none; }
 
 .lesson {
-  display: grid; grid-template-columns: 58px 1fr; gap: 12px;
+  display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 12px;
   background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
   padding: 14px 14px 14px 12px; margin-bottom: 10px;
   border: 1.5px solid transparent;
@@ -354,7 +354,7 @@ body { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 .tab-other .days { display: none; }
 
 /* новости, документы сессии — те же карточки, что у пар, но без колонки времени */
-.lesson.news, .lesson.doc { grid-template-columns: 1fr; }
+.lesson.news, .lesson.doc { grid-template-columns: minmax(0, 1fr); }
 .lesson.unread { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 .news-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 .news-text { margin: 0 0 8px; color: var(--muted); font-size: 14.5px; white-space: pre-line; overflow-wrap: anywhere; }
@@ -381,7 +381,27 @@ body { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 .add-debt { display: flex; gap: 8px; margin: 12px 0 0; }
 .add-debt .search { flex: 1; min-width: 0; padding: 9px 12px; font-size: 14.5px; }
 .add-debt .btn { padding: 9px 13px; font-size: 14px; }
-.ic.mat { border: 0; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; font-weight: 650; }
+.ic.mat { border: 0; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; font-weight: 650; max-width: 100%; min-width: 0; text-align: left; }
+/* длинное название пособия в карточке пары в одну строку, полностью оно во вкладке «Сессия» */
+.ic.mat .mt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* фамилия преподавателя и группа в карточке нажимаются: подчёркнуты пунктиром */
+.ic.tlink, .ic.glink {
+  border: 0; background: none; padding: 2px 0; font: inherit; color: inherit;
+  text-decoration: underline dotted color-mix(in srgb, currentColor 55%, transparent); text-underline-offset: 3px;
+}
+.ic.glink { color: var(--accent); font-weight: 650; }
+
+/* ---------- поиск: группы и преподаватели */
+#searchForm .search { width: 100%; margin: 2px 0 4px; }
+.why h3 { margin-bottom: 8px; }
+.why p b { color: var(--text); }
+.back-link {
+  display: inline-flex; align-items: center; gap: 2px; border: 0; background: none;
+  color: var(--accent); font-weight: 700; font-size: 15px; padding: 4px 8px 4px 0; margin: 0 0 6px;
+}
+.note-card.other { background: var(--surface-2); color: var(--muted); }
+.note-card.now { background: var(--now-soft); color: var(--now); }
+.note-card.tip { margin-top: 4px; }
 .empty.small { padding: 18px 20px 26px; }
 .empty.small .sticker { width: 130px; height: 100px; }
 
@@ -577,7 +597,7 @@ h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .days { margin: 10px -12px 0; padding: 2px 12px 6px; gap: 5px; }
   .day { flex-basis: 44px; min-width: 44px; }
   main { padding: 4px 12px 8px; }
-  .lesson { grid-template-columns: 50px 1fr; gap: 10px; padding: 12px 12px 12px 10px; }
+  .lesson { grid-template-columns: 50px minmax(0, 1fr); gap: 10px; padding: 12px 12px 12px 10px; }
   .lesson .num { font-size: 20px; }
 }
 

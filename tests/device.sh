@@ -187,12 +187,60 @@ dump sess
 texts sess > out/sess.txt
 shot 06c-session
 check out/sess.txt "Остались несданные предметы\|Слежу за пересдачами" "вкладка «Сессия»: вопрос про долги"
-check out/sess.txt "Пособия колледжа" "вкладка «Сессия»: пособия колледжа"
+check out/sess.txt "Пособия к твоим предметам" "вкладка «Сессия»: пособия к своим предметам"
+check out/sess.txt "Показать все пособия" "вкладка «Сессия»: кнопка «Показать все пособия»"
 adb shell input keyevent 4
 sleep 2
 dump back2
 texts back2 > out/back2.txt
 check out/back2.txt "сентября\|октября\|ноября\|декабря" "«Назад» с вкладки — снова расписание"
+
+# «Поиск»: расписание другой группы и преподавателя, своя группа при этом не меняется
+XY=$(center '^Поиск$')
+adb shell input tap $XY
+sleep 2
+XY=$(center 'searchInput')
+adb shell input tap $XY
+sleep 1
+adb shell input text 2507sa1
+sleep 2
+dump find
+texts find > out/find.txt
+shot 06d-find
+check out/find.txt "2507са1" "поиск: группа находится (номер латиницей)"
+adb shell input keyevent 66
+sleep 3
+dump fgroup
+texts fgroup > out/fgroup.txt
+shot 06e-other-group
+check out/fgroup.txt "Расписание группы В2507са1" "поиск: открыто расписание другой группы"
+check out/fgroup.txt "Твоя группа В2507сб1" "поиск: своя группа и уведомления не поменялись"
+XY=$(center 'все пары преподавателя')
+if [ -n "$XY" ]; then
+  adb shell input tap $XY
+  sleep 3
+  dump teacher
+  texts teacher > out/teacher.txt
+  shot 06f-teacher
+  check out/teacher.txt "на этой неделе" "преподаватель: пары за неделю по нажатию на фамилию"
+  check out/teacher.txt "Собрано из расписания всех курсов" "преподаватель: пояснение, откуда данные"
+  adb shell input keyevent 4
+  sleep 2
+  dump tback
+  texts tback > out/tback.txt
+  check out/tback.txt "Расписание группы В2507са1" "«Назад» от преподавателя: снова другая группа"
+else
+  echo "SKIP у группы 2507са1 в этот день нет пар с преподавателем"
+fi
+adb shell input keyevent 4
+sleep 1.5
+adb shell input keyevent 4
+sleep 2
+dump back3
+texts back3 > out/back3.txt
+check out/back3.txt "Расписание занятий" "«Назад» из поиска: приложение открыто"
+check out/back3.txt "2507сб1" "после поиска группа своя (2507сб1)"
+check out/back3.txt "сентября\|октября\|ноября\|декабря" "«Назад» из поиска: снова своё расписание"
 
 # переключатель чёрной темы в шапке
 switch_state() {

@@ -87,7 +87,7 @@ function debtsCard({ debts, subjects, editing, draft }) {
   </section>`;
 }
 
-export function sessionHtml(mine, { debts, subjects, editing, draft, unseen, today, loaded }) {
+export function sessionHtml(mine, { debts, subjects, editing, draft, unseen, today, loaded, mats = { mine: [], showAll: false } }) {
   const label = courseLabel(mine.course);
   let html = `<div class="day-head"><h2>Сессия</h2><span class="sum">${esc(label || 'зачёты, экзамены и пересдачи')}</span></div>`;
   html += debtsCard({ debts, subjects, editing, draft });
@@ -121,9 +121,26 @@ export function sessionHtml(mine, { debts, subjects, editing, draft, unseen, tod
       <span>${esc(f.title)}</span>${ICONS.arrow}</button>`).join('') + '</div>';
   }
 
-  if (mine.materials.length) {
-    html += '<h3 class="sec-title">Пособия колледжа</h3><div class="card-flat list">' + mine.materials.map((m) => `<button type="button" class="list-row press" data-act="open-url" data-url="${esc(m.url)}">
-      <span>${ICONS.book} ${esc(m.title)}</span>${ICONS.arrow}</button>`).join('') + '</div>';
+  html += materialsHtml(mats, mine.materials);
+  return html;
+}
+
+const matRow = (m) => `<button type="button" class="list-row press" data-act="open-url" data-url="${esc(m.url)}">
+  <span>${ICONS.book} <span><b>${esc(m.title.replace(/^учебн\S*\s+(методическ\S*\s+)?пособие\s*/i, ''))}</b>${m.subject ? `<small>${m.byTopic ? 'по теме предмета' : 'к предмету'}: ${esc(m.subject)}</small>` : ''}</span></span>${ICONS.arrow}</button>`;
+
+/** Пособия колледжа: сначала только к предметам группы, все остальные по кнопке. */
+function materialsHtml({ mine, showAll }, all) {
+  if (!all.length) return '';
+  let html = '<h3 class="sec-title">Пособия к твоим предметам</h3>';
+  if (mine.length) html += `<div class="card-flat list">${mine.map(matRow).join('')}</div>`;
+  else html += '<p class="hint sec-empty">К предметам твоей группы на этой неделе пособий на сайте нет.</p>';
+  const rest = all.filter((m) => !mine.some((x) => x.url === m.url));
+  if (!rest.length) return html;
+  if (showAll) {
+    html += `<h3 class="sec-title">Остальные пособия</h3><div class="card-flat list">${rest.map(matRow).join('')}</div>
+      <button type="button" class="btn secondary press wide" data-act="mats-all">Скрыть остальные</button>`;
+  } else {
+    html += `<button type="button" class="btn secondary press wide" data-act="mats-all">Показать все пособия (${all.length})</button>`;
   }
   return html;
 }
