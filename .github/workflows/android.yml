@@ -1,0 +1,101 @@
+name: Сборка APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - "tests/*.mjs"
+      - "tests/fixtures/**"
+      - "tests/golden-*.json"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+env:
+  # номера версий продолжаются после переезда репозитория (последняя старая — 1.0.23)
+  VERSION_OFFSET: "23"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Сначала тесты движка: если расписание разбирается с ошибками — APK не собираем
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Тесты расписания
+        working-directory: tests
+        run: npm install --no-audit --no-fund && node run.mjs
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      # Ключ подписи хранится только в секретах репозитория, в коде его нет
+      - name: Ключ подписи
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          [ -n "$KEYSTORE_B64" ] || { echo "нет секрета KEYSTORE_B64 — без постоянного ключа обновления не встанут"; exit 1; }
+          echo "$KEYSTORE_B64" | base64 -d > android/keystore.p12
+
+      - name: Номер версии
+        id: ver
+        run: |
+          n=$((GITHUB_RUN_NUMBER + VERSION_OFFSET))
+          echo "n=$n" >> "$GITHUB_OUTPUT"
+          echo "name=raspisanie-1.0.$n.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Сборка
+        working-directory: android
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Имя файла
+        run: cp android/app/build/outputs/apk/release/app-release.apk "${{ steps.ver.outputs.name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: ${{ steps.ver.outputs.name }}
+
+      # Та же программа, но с номером версии 1: на эмуляторе она должна сама обновиться до этого релиза
+      - name: "Тестовая «старая» версия (проверка автообновления)"
+        working-directory: android
+        env:
+          VERSION_CODE_OVERRIDE: "1"
+        run: |
+          gradle assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ../old-for-update-test.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-old
+          path: old-for-update-test.apk
+          retention-days: 7
+
+      - name: Убрать ключ подписи
+        if: always()
+        run: rm -f android/keystore.p12
+
+      - name: "Релиз (APK в разделе Releases)"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # описание релиза — «что нового» из коммита; приложение покажет его после обновления
+          git log -1 --pretty=%B > notes.txt
+          gh release create "v1.0.${{ steps.ver.outputs.n }}" "${{ steps.ver.outputs.name }}" \
+            --title "Расписание 1.0.${{ steps.ver.outputs.n }}" \
+            --notes-file notes.txt

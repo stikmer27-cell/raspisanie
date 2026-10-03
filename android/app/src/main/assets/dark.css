@@ -1,0 +1,28 @@
+/* Чёрная тема. Подключается из index.html; app.js включает её (media="all") или выключает (media="not all"). */
+:root {
+  --bg: #050507;
+  --surface: #141418;
+  --surface-2: #1c1c22;
+  --text: #ececf1;
+  --muted: #9a9aa8;
+  --line: #26262e;
+  --accent: #6b9bff;
+  --accent-2: #8fb2ff;
+  --accent-soft: #18223d;
+  --accent-text: #06080f;
+  --now: #3ccf82;
+  --now-soft: #10261a;
+  --warn: #ffb35c;
+  --warn-soft: #2e2212;
+  --danger: #ff6b5e;
+  --danger-soft: #331716;
+  --sun: #ffd166;
+  --peach: #ff9f80;
+  --emblem: #7aa2ff;
+  --k-lec: #8fb2ff;   --k-lec-bg: #18223d;
+  --k-prac: #4fd1bf;  --k-prac-bg: #0f2a27;
+  --k-lab: #b89cff;   --k-lab-bg: #231c3b;
+  --k-oth: #a3a3b3;   --k-oth-bg: #202028;
+  --shadow: none;
+  color-scheme: dark;
+}

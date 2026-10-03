@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <title>Расписание</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // тема до первой отрисовки — чтобы при запуске не мигало светлым.
+    // Чёрная тема — отдельный файл dark.css, его включает атрибут media.
+    (function () {
+      var dark = matchMedia('(prefers-color-scheme: dark)').matches;
+      try {
+        var c = JSON.parse(window.Android.getConfig());
+        var t = c.theme || 'system';
+        var sys = typeof c.systemDark === 'boolean' ? c.systemDark : dark;
+        dark = t === 'dark' || (t !== 'light' && sys);
+      } catch (e) { /* без Android — по системе */ }
+      document.documentElement.setAttribute('data-dark', dark ? '1' : '0');
+      document.write('<link rel="stylesheet" href="dark.css" id="darkCss" media="' + (dark ? 'all' : 'not all') + '">');
+    })();
+  </script>
+</head>
+<body>
+  <header class="top">
+    <div class="top-row">
+      <div class="brand">
+        <span class="brand-img" role="img" aria-label="Эмблема ВКИ НГУ"></span>
+        <div class="brand-text">
+          <h1>ВКИ НГУ</h1>
+          <span class="brand-line"></span>
+          <span class="brand-sub">Расписание занятий</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="theme-switch" id="themeBtn" role="switch" aria-checked="false" aria-label="Тёмная тема">
+          <span class="ts-star s1"></span><span class="ts-star s2"></span><span class="ts-star s3"></span><span class="ts-star s4"></span>
+          <span class="ts-cloud c1"></span><span class="ts-cloud c2"></span>
+          <span class="ts-knob"><span class="ts-crater k1"></span><span class="ts-crater k2"></span><span class="ts-crater k3"></span></span>
+        </button>
+        <button class="icon-btn press" id="refreshBtn" aria-label="Обновить">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+        </button>
+        <button class="icon-btn press" id="settingsBtn" aria-label="Уведомления и настройки">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
+          <span class="dot" id="bellDot" hidden></span>
+        </button>
+      </div>
+    </div>
+    <div class="sub-row">
+      <button class="chip press" id="groupBtn" aria-label="Сменить группу"><span id="groupName">…</span></button>
+      <p class="sub" id="sub">&nbsp;</p>
+    </div>
+    <nav class="days" id="days" aria-label="Дни недели"></nav>
+  </header>
+
+  <main id="main">
+    <div class="pull" id="pull"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M6 13l6 6 6-6"/></svg></div>
+    <div class="view" id="view">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+  </main>
+
+  <footer class="foot" id="foot"></footer>
+  <div class="toast" id="toast" role="status"></div>
+
+  <dialog id="groupDlg" class="sheet">
+    <form method="dialog">
+      <div class="grabber"></div>
+      <div class="sheet-head"><h2>Моя группа</h2><button class="icon-btn press" value="close" aria-label="Закрыть">✕</button></div>
+      <input id="groupSearch" class="search" type="search" placeholder="Поиск, например 2401а1" autocomplete="off">
+      <div class="group-list" id="groupList"></div>
+      <p class="hint">Уведомления приходят для выбранной группы.</p>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDlg" class="sheet">
+    <form method="dialog" id="settingsForm">
+      <div class="grabber"></div>
+      <div class="sheet-head"><h2>Уведомления</h2><button class="icon-btn press" value="close" aria-label="Закрыть">✕</button></div>
+      <div id="settingsBody"></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

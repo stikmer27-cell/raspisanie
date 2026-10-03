@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>job</title>
+<!-- Невидимая страница для фоновой проверки: скачать страницу и PDF, разобрать,
+     решить, какие уведомления показать. Результат уходит в Android через Bridge. -->
+<script type="module">
+import './polyfills.js'; // до pdf.js: старый WebView (Chrome < 128) без них не разбирает PDF
+import * as pdfjs from './pdf.min.js';
+import { buildSchedule, decide, nowTz } from './engine.js';
+
+const getJSON = async (path) => {
+  try {
+    const r = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null;
+  }
+};
+// адрес зашифрован в пути: Android сам скачает его (у WebView нет доступа к чужим сайтам из-за CORS)
+const b64url = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const net = async (url) => {
+  const r = await fetch('/net/' + b64url(url), { cache: 'no-store' });
+  if (!r.ok) throw new Error(`${r.status} ${r.headers.get('x-error') || ''} ${url}`.trim());
+  return r;
+};
+const fetchText = async (url) => (await net(url)).text();
+const fetchBytes = async (url) => new Uint8Array(await (await net(url)).arrayBuffer());
+
+async function main() {
+  const input = JSON.parse(Bridge.input());
+  const cfg = input.cfg;
+  try {
+    // pdf.js работает прямо на этой странице, без отдельного Worker
+    globalThis.pdfjsWorker = await import('./pdf.worker.min.js');
+    const [prev, cache, state] = await Promise.all([getJSON('/data/schedule.json'), getJSON('/data/cache.json'), getJSON('/data/state.json')]);
+    const now = nowTz(cfg.timezone);
+
+    let data, newCache = null, errors = [], offline = false;
+    try {
+      ({ data, cache: newCache, errors } = await buildSchedule({ pdfjs, fetchText, fetchBytes, prev, cache: cache || {}, today: now.iso }));
+    } catch (e) {
+      if (!prev) throw e;
+      // сайт недоступен — уведомления всё равно считаем по последним данным
+      offline = true;
+      errors = [String((e && e.message) || e)];
+      data = { ...prev };
+      delete data.updated;
+    }
+    const prevBody = prev ? { ...prev } : null;
+    if (prevBody) delete prevBody.updated;
+    const changed = !prevBody || JSON.stringify(prevBody) !== JSON.stringify(data);
+    data.updated = changed ? new Date().toISOString() : prev.updated;
+
+    for (const err of errors) console.error('schedule:', err);
+    const res = decide({ data, state: state || { notified: {} }, cfg, now, test: input.mode === 'test' });
+    // файлы — строками, как есть (без пересборки JSON на стороне Android)
+    if (changed) Bridge.save('schedule.json', JSON.stringify(data));
+    if (newCache) Bridge.save('cache.json', JSON.stringify(newCache));
+    Bridge.save('state.json', JSON.stringify(res.state));
+    Bridge.done(JSON.stringify({ messages: res.messages, errors, offline, changed, groupError: res.error || null }));
+  } catch (e) {
+    Bridge.fail(String((e && (e.stack || e.message)) || e));
+  }
+}
+main();
+</script>

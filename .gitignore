@@ -1,0 +1,8 @@
+node_modules/
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+tests/.mut-*
+android/keystore.p12

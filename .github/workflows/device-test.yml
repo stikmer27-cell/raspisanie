@@ -1,0 +1,55 @@
+name: Проверка на эмуляторе
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: KVM для эмулятора
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: APK из последнего релиза
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --pattern '*.apk' --dir .
+          # «старая» тестовая версия из той же сборки — для проверки автообновления (если оно включено)
+          run=$(gh run list --workflow android.yml --status success -L 1 --json databaseId -q '.[0].databaseId')
+          gh run download "$run" -n apk-old -D old || echo "тестовой старой версии нет — автообновление не проверяем"
+          ls -la *.apk old 2>/dev/null || true
+
+      - name: Pillow для проверки скриншотов
+        run: python3 -m pip install --quiet --break-system-packages pillow || sudo apt-get install -y python3-pil
+
+      - name: Сайт колледжа доступен отсюда?
+        run: curl -sS -o /dev/null -w '%{http_code}\n' https://ci.nsu.ru/education/schedule/ || true
+
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          # чистый Android без Google Play Services: на свежем образе они обновляются в фоне
+          # и система убивает зависящие от них процессы (в т.ч. любое приложение с WebView)
+          target: default
+          ram-size: 4096M
+          heap-size: 512M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash tests/device.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: device-test
+          path: out/

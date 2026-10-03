@@ -1,0 +1,11 @@
+{
+  "name": "raspisanie-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "dependencies": {
+    "pdfjs-dist": "6.3.289"
+  }
+}
