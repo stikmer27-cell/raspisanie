@@ -281,10 +281,15 @@ if [ -n "$OLD" ]; then
   adb shell dumpsys notification --noredact > out/notifications-update.txt
   check out/notifications-update.txt "обновлено до 1.0.$NEW" "уведомление «Расписание обновлено до 1.0.$NEW»"
   adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null
-  sleep 8
+  sleep 6
+  # после холодного старта WebView отдаёт текст экрана не сразу — ждём
+  for i in $(seq 1 8); do
+    dump after
+    texts after > out/after.txt
+    grep -q "2507сб1" out/after.txt && break
+    sleep 3
+  done
   shot 15-after-update
-  dump after
-  texts after > out/after.txt
   check out/after.txt "2507сб1" "после обновления группа и данные на месте"
 fi
 
