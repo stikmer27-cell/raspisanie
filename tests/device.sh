@@ -259,6 +259,19 @@ if [ -n "$OLD" ]; then
   done
   check out/upd.txt "Вышло обновление 1.0.$NEW" "пока приложение открыто — плашка «Вышло обновление 1.0.$NEW»"
   shot 14-update-ready
+  # без разрешения «Установка неизвестных приложений» Android спрашивает подтверждение на каждое
+  # обновление — приложение само предлагает разрешить (один раз) в настройках
+  XY=$(center 'Уведомления и настройки')
+  adb shell input tap $XY
+  sleep 2
+  dump updset
+  texts updset > out/updset.txt
+  check out/updset.txt "Установка обновлений" "в настройках есть «Установка обновлений»"
+  check out/updset.txt "разреши один раз" "приложение просит один раз разрешить установку обновлений"
+  adb shell input keyevent 4
+  sleep 2
+  # как будто пользователь нажал «Разрешить» и включил переключатель
+  adb shell appops set $PKG REQUEST_INSTALL_PACKAGES allow
   echo "версия до: $(ver), в релизе: $NEW"
   adb shell input keyevent 3
   for i in $(seq 1 36); do sleep 5; [ "$(ver)" = "$NEW" ] && break; done

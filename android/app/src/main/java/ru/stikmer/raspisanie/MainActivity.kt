@@ -250,6 +250,16 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun installUpdate() = Scheduler.update(this@MainActivity, "now")
 
+        /** Один раз разрешить «Расписанию» ставить свои обновления — дальше они ставятся без вопросов. */
+        @JavascriptInterface
+        fun openInstallSettings() = runOnUiThread {
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            } catch (e: Exception) {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            }
+        }
+
         @JavascriptInterface
         fun requestNotifications() = runOnUiThread {
             // спросить системным окном можно, пока пользователь не отказал дважды; дальше — только через настройки

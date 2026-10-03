@@ -258,23 +258,34 @@ window.onNative = async (type, arg) => {
 
 // ---------------------------------------------------------------- обновление приложения
 
-/** Скачана новая версия: короткая плашка сверху. Сама поставится, когда выйдешь из приложения. */
+const hiddenAllow = () => { try { return localStorage.getItem('hideAllowInstall') === '1'; } catch { return false; } };
+
+/**
+ * Плашка сверху: скачана новая версия (сама поставится, когда выйдешь из приложения)
+ * или — пока не разрешено — просьба один раз разрешить «Расписанию» ставить свои обновления.
+ */
 function renderUpdateBar() {
   const u = S.cfg.update || {};
+  const ask = u.enabled && u.canInstall === false && !hiddenAllow();
   let bar = $('#updateBar');
-  if (!u.pending || !S.cfg.group) { if (bar) bar.remove(); return; }
+  if ((!u.pending && !ask) || !S.cfg.group) { if (bar) bar.remove(); return; }
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'updateBar';
-    bar.className = 'update-bar';
     $('#main').insertBefore(bar, $('#pull'));
   }
-  bar.innerHTML = `${ICONS.bolt}<div><b>Вышло обновление ${esc(u.pending)}</b><span>Поставится само, когда выйдешь из приложения</span></div>
-    <button type="button" class="btn press" data-act="update-now">Обновить</button>`;
+  bar.className = `update-bar${u.pending ? '' : ' ask'}`;
+  bar.innerHTML = u.pending
+    ? `${ICONS.bolt}<div><b>Вышло обновление ${esc(u.pending)}</b><span>Поставится само, когда выйдешь из приложения</span></div>
+      <button type="button" class="btn press" data-act="update-now">Обновить</button>`
+    : `${ICONS.bolt}<div><b>Включи автообновление</b><span>Один раз разреши «Расписанию» ставить свои обновления</span></div>
+      <button type="button" class="btn press" data-act="allow-install">Разрешить</button>
+      <button type="button" class="x press" data-act="hide-allow" aria-label="Скрыть">✕</button>`;
 }
 
 function updateState(u) {
   if (!u.enabled) return 'выключено в этой сборке';
+  if (u.canInstall === false) return 'нужно один раз разрешить установку обновлений — иначе телефон будет каждый раз спрашивать';
   if (u.busy) return 'проверяю…';
   if (u.pending) return `скачана версия ${u.pending} — поставится, когда выйдешь из приложения`;
   if (u.error) return `не получилось: ${u.error}`;
@@ -622,11 +633,13 @@ function fillGroups(q) {
 }
 
 function refreshBell() {
-  $('#bellDot').hidden = S.cfg.notifications !== false && S.cfg.battery !== false;
+  const u = S.cfg.update || {};
+  $('#bellDot').hidden = S.cfg.notifications !== false && S.cfg.battery !== false && !(u.enabled && u.canInstall === false);
 }
 
 function renderSettings() {
   const c = S.cfg;
+  const u = c.update || {};
   const yes = '<span class="ok">✓</span>';
   const last = c.lastOk ? `последняя: ${longDate(c.lastOk)}` : 'ещё не было';
   $('#settingsBody').innerHTML = `
@@ -635,6 +648,8 @@ function renderSettings() {
         ${c.notifications ? yes : '<button type="button" class="btn press" data-act="notif">Разрешить</button>'}</div>
       <div class="state"><span class="lbl">Работа в фоне<small>${c.battery ? 'телефон не мешает проверкам' : 'экономия батареи может задерживать уведомления'}</small></span>
         ${c.battery ? yes : '<button type="button" class="btn press" data-act="battery">Разрешить</button>'}</div>
+      ${u.enabled ? `<div class="state"><span class="lbl">Установка обновлений<small>${u.canInstall === false ? 'разреши один раз — и новые версии будут ставиться сами' : 'разрешена — новые версии ставятся сами'}</small></span>
+        ${u.canInstall === false ? '<button type="button" class="btn press" data-act="allow-install">Разрешить</button>' : yes}</div>` : ''}
       <div class="state"><span class="lbl">Проверка сайта<small>${c.running ? 'идёт сейчас…' : last}${c.lastError ? ' · последняя попытка не удалась' : ''}</small></span>
         ${c.lastError ? '<span class="bad">!</span>' : c.lastOk ? yes : ''}</div>
       <div class="row">
@@ -716,6 +731,13 @@ document.addEventListener('click', (e) => {
   } else if (a === 'update-now') {
     if (native.installUpdate) native.installUpdate();
     toast('Обновляю — приложение закроется и пришлёт уведомление, когда всё готово');
+  } else if (a === 'allow-install') {
+    if (native.openInstallSettings) native.openInstallSettings();
+    toast('Включи «Разрешить установку из этого источника» и вернись назад');
+  } else if (a === 'hide-allow') {
+    try { localStorage.setItem('hideAllowInstall', '1'); } catch { /* */ }
+    renderUpdateBar();
+    toast('Разрешить можно потом в 🔔 → Установка обновлений');
   } else if (a === 'widget') {
     const ok = native.pinWidget && native.pinWidget();
     toast(ok ? 'Подтверди добавление — виджет появится на главном экране'

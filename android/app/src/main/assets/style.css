@@ -322,6 +322,9 @@ main { padding: 4px 16px 8px; min-height: 60vh; position: relative; }
 .update-bar b { display: block; font-size: 14.5px; color: var(--text); }
 .update-bar .btn { padding: 8px 13px; font-size: 14px; background: var(--now); color: var(--surface); }
 .onboard .update-bar { display: none; }
+.update-bar.ask { background: var(--accent-soft); color: var(--accent); }
+.update-bar.ask .btn { background: var(--accent); color: var(--accent-text); }
+.update-bar .x { border: 0; background: transparent; color: var(--muted); width: 30px; height: 30px; border-radius: 10px; font-size: 14px; flex-shrink: 0; }
 
 /* ---------- первый вход */
 .onboard #refreshBtn, .onboard #settingsBtn, .onboard .sub-row .chip, .onboard .days, .onboard .foot, .onboard .pull { display: none; }

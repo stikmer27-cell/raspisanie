@@ -67,6 +67,8 @@ object Prefs {
         val p = sp(ctx)
         return JSONObject()
             .put("enabled", Updater.enabled)
+            // без этого разрешения (один раз в настройках) Android спрашивает подтверждение на каждое обновление
+            .put("canInstall", ctx.packageManager.canRequestPackageInstalls())
             .put("busy", Updater.busy)
             .put("checked", if (p.contains("updChecked")) p.getLong("updChecked", 0) else JSONObject.NULL)
             .put("latest", p.getString("updLatest", null) ?: JSONObject.NULL)
