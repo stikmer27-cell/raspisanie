@@ -5,8 +5,15 @@
      решить, какие уведомления показать. Результат уходит в Android через Bridge. -->
 <script type="module">
 import './polyfills.js'; // до pdf.js: старый WebView (Chrome < 128) без них не разбирает PDF
-import * as pdfjs from './pdf.min.js';
 import { buildSchedule, decide, nowTz } from './engine.js';
+
+// pdf.js (1,8 МБ) грузим, только когда на сайте появился новый PDF — обычная проверка без него
+// в разы легче и не тормозит телефон. pdf.js работает прямо на этой странице, без отдельного Worker.
+let pdfjsPromise = null;
+const pdfjs = () => (pdfjsPromise ||= (async () => {
+  globalThis.pdfjsWorker = await import('./pdf.worker.min.js');
+  return import('./pdf.min.js');
+})());
 
 const getJSON = async (path) => {
   try {
@@ -30,14 +37,12 @@ async function main() {
   const input = JSON.parse(Bridge.input());
   const cfg = input.cfg;
   try {
-    // pdf.js работает прямо на этой странице, без отдельного Worker
-    globalThis.pdfjsWorker = await import('./pdf.worker.min.js');
     const [prev, cache, state] = await Promise.all([getJSON('/data/schedule.json'), getJSON('/data/cache.json'), getJSON('/data/state.json')]);
     const now = nowTz(cfg.timezone);
 
-    let data, newCache = null, errors = [], offline = false;
+    let data, newCache = null, fresh = 0, errors = [], offline = false;
     try {
-      ({ data, cache: newCache, errors } = await buildSchedule({ pdfjs, fetchText, fetchBytes, prev, cache: cache || {}, today: now.iso }));
+      ({ data, cache: newCache, fresh, errors } = await buildSchedule({ pdfjs, fetchText, fetchBytes, prev, cache: cache || {}, today: now.iso }));
     } catch (e) {
       if (!prev) throw e;
       // сайт недоступен — уведомления всё равно считаем по последним данным
@@ -55,7 +60,9 @@ async function main() {
     const res = decide({ data, state: state || { notified: {} }, cfg, now, test: input.mode === 'test' });
     // файлы — строками, как есть (без пересборки JSON на стороне Android)
     if (changed) Bridge.save('schedule.json', JSON.stringify(data));
-    if (newCache) Bridge.save('cache.json', JSON.stringify(newCache));
+    // кэш разобранных PDF (~0,5 МБ) переписываем, только если что-то разобрано заново или файл пропал с сайта
+    const sameKeys = newCache && cache && Object.keys(newCache).sort().join('\n') === Object.keys(cache).sort().join('\n');
+    if (newCache && (fresh || !sameKeys)) Bridge.save('cache.json', JSON.stringify(newCache));
     Bridge.save('state.json', JSON.stringify(res.state));
     Bridge.done(JSON.stringify({ messages: res.messages, errors, offline, changed, groupError: res.error || null }));
   } catch (e) {

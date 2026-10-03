@@ -369,7 +369,7 @@ function renderOnboarding() {
   document.body.classList.add('onboard');
   const view = $('#view');
   if (!view.querySelector('.onb')) {
-    view.innerHTML = `<div class="onb">
+    setHtml(view, 'view', `<div class="onb">
       ${STICKERS.group}
       <h2>Привет!</h2>
       <p>Впиши свою группу — покажу расписание и буду присылать уведомления.</p>
@@ -379,7 +379,7 @@ function renderOnboarding() {
         <div id="onbSugg" class="onb-sugg"></div>
         <button class="btn wide press" id="onbBtn">Готово</button>
       </form>
-    </div>`;
+    </div>`, true);
     animate(view, 'fade');
     $('#onbInput').addEventListener('input', () => updateOnboarding());
     $('#onbForm').addEventListener('submit', (e) => { e.preventDefault(); submitOnboarding(); });
@@ -448,20 +448,17 @@ function render(anim) {
   const view = $('#view');
 
   if (!S.data) {
-    $('#days').innerHTML = '';
-    if (S.cfg.lastError && !S.cfg.running) {
-      view.innerHTML = empty('offline', 'Нет связи с сайтом', 'Проверь интернет — и попробуем ещё раз.', '<button class="btn press" data-act="retry">Повторить</button>');
-    } else {
-      view.innerHTML = empty('load', 'Загружаю расписание', 'Скачиваю PDF с сайта колледжа и разбираю его. Это займёт несколько секунд.');
-    }
-    animate(view, 'fade');
+    setHtml($('#days'), 'days', '');
+    const changed = S.cfg.lastError && !S.cfg.running
+      ? setHtml(view, 'view', empty('offline', 'Нет связи с сайтом', 'Проверь интернет — и попробуем ещё раз.', '<button class="btn press" data-act="retry">Повторить</button>'))
+      : setHtml(view, 'view', empty('load', 'Загружаю расписание', 'Скачиваю PDF с сайта колледжа и разбираю его. Это займёт несколько секунд.'));
+    if (changed) animate(view, 'fade');
     renderFoot();
     return;
   }
   if (!g) {
-    $('#days').innerHTML = '';
-    view.innerHTML = empty('group', 'Выбери свою группу', `Группа «${esc(S.cfg.group || '')}» не нашлась в расписании.`, '<button class="btn press" data-act="group">Выбрать группу</button>');
-    animate(view, 'fade');
+    setHtml($('#days'), 'days', '');
+    if (setHtml(view, 'view', empty('group', 'Выбери свою группу', `Группа «${esc(S.cfg.group || '')}» не нашлась в расписании.`, '<button class="btn press" data-act="group">Выбрать группу</button>'))) animate(view, 'fade');
     renderFoot();
     return;
   }
@@ -469,21 +466,30 @@ function render(anim) {
   const days = dayList();
   if (!S.sel || !days.includes(S.sel)) S.sel = defaultDay(days);
   const { iso: today } = now();
-  $('#days').innerHTML = days.map((d) => {
+  setHtml($('#days'), 'days', days.map((d) => {
     const ls = g.days[d];
     const plan = ls ? dayPlan(ls) : null;
     const cnt = ls === undefined ? '?' : pairDots(ls);
     const cls = ['day', 'press', d === today && 'today', d === S.sel && 'sel', ls === undefined && 'missing'].filter(Boolean).join(' ');
     const label = `${WD[weekday(d)]} ${dayNum(d)} ${monthName(d)}${plan ? `, ${toPair(plan.first)}, ${pairsWord(plan.count)}` : ''}`;
-    return `<button class="${cls}" data-day="${d}" aria-pressed="${d === S.sel}" aria-label="${label}">
+    return `<button class="${cls}" data-day="${d}" aria-pressed="${d === S.sel}" aria-label="${esc(label)}">
       <span class="wd">${WD_SHORT[weekday(d)]}</span><span class="dn">${dayNum(d)}</span><span class="cnt">${cnt}</span></button>`;
-  }).join('');
+  }).join(''), !!anim);
   const selBtn = document.querySelector(`.day[data-day="${S.sel}"]`);
   if (selBtn && anim) selBtn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
 
-  view.innerHTML = dayHtml(g, S.sel);
-  animate(view, anim);
+  // раз в 30 секунд экран пересчитывается — но в DOM уходит, только если что-то правда поменялось
+  if (setHtml(view, 'view', dayHtml(g, S.sel), !!anim)) animate(view, anim);
   renderFoot();
+}
+
+const lastHtml = {};
+/** Вставить разметку, только если она отличается от уже показанной (или force — ради анимации). */
+function setHtml(el, key, html, force = false) {
+  if (!force && lastHtml[key] === html && el.isConnected) return false;
+  lastHtml[key] = html;
+  el.innerHTML = html;
+  return true;
 }
 
 function animate(view, anim) {
@@ -599,7 +605,7 @@ function renderFoot() {
   const parts = [];
   if (S.data && S.data.updated) parts.push(`Расписание менялось: ${longDate(S.data.updated)}`);
   parts.push(`<a href="#" data-act="pdf">PDF с сайта</a> · <a href="#" data-act="site">ci.nsu.ru</a>`);
-  $('#foot').innerHTML = parts.join('<br>');
+  setHtml($('#foot'), 'foot', parts.join('<br>'));
 }
 
 // ---------------------------------------------------------------- шторки
@@ -793,7 +799,7 @@ document.addEventListener('touchend', (e) => {
 }, { passive: true });
 
 // раз в 30 секунд обновляем «сейчас / через N минут» (без анимаций)
-setInterval(() => { if (S.data && document.visibilityState === 'visible') render(null); }, 30000);
+setInterval(() => { if (S.data && document.visibilityState === 'visible') render(null); }, 30000); // без изменений DOM не трогается
 
 // ---------------------------------------------------------------- старт
 
@@ -802,4 +808,6 @@ paintTheme();
 S.sel = (native.takeOpenDay && native.takeOpenDay()) || null; // открыли из уведомления — сразу нужный день
 await loadData();
 render('fade');
-if (!S.data || !S.cfg.lastOk || Date.now() - S.cfg.lastOk > 15 * 60 * 1000) refresh(false);
+// проверка сайта при открытии: без данных — сразу, иначе чуть позже, чтобы не мешать первой отрисовке
+if (!S.data) refresh(false);
+else if (!S.cfg.lastOk || Date.now() - S.cfg.lastOk > 15 * 60 * 1000) setTimeout(() => refresh(false), 1500);

@@ -127,11 +127,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 svg { display: block; }
 
 /* ---------- нажатия: пружинка + волна */
+/* без постоянного will-change: десятки отдельных слоёв на слабых телефонах тормозят прокрутку */
 .press {
   position: relative;
   overflow: hidden;
   transition: transform .35s var(--spring), background-color .2s, color .2s, box-shadow .2s;
-  will-change: transform;
 }
 .press:active, .press.pressed { transform: scale(.92); transition-duration: .08s; }
 .ripple {
@@ -146,12 +146,10 @@ svg { display: block; }
 @keyframes ripple { to { transform: scale(2.6); opacity: 0; } }
 
 /* ---------- шапка */
+/* сплошной фон: размытие под шапкой (backdrop-filter) пересчитывается на каждый кадр прокрутки */
 .top {
   position: sticky; top: 0; z-index: 5;
-  background: var(--bg); /* запас для WebView без color-mix */
-  background: color-mix(in srgb, var(--bg) 90%, transparent);
-  backdrop-filter: saturate(1.4) blur(14px);
-  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  background: var(--bg);
   padding: 14px 16px 10px;
 }
 .top-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -208,7 +206,6 @@ main { padding: 4px 16px 8px; min-height: 60vh; position: relative; }
 .pull svg { transition: transform .2s; }
 .pull.ready svg { transform: rotate(180deg); }
 .pull.go svg { animation: spin .8s linear infinite; }
-.view { will-change: transform, opacity; }
 .view.in-right { animation: inRight .32s var(--ease); }
 .view.in-left { animation: inLeft .32s var(--ease); }
 .view.in-fade { animation: fadeUp .3s var(--ease); }
@@ -248,8 +245,14 @@ main { padding: 4px 16px 8px; min-height: 60vh; position: relative; }
 
 .lesson.now { border-color: var(--now); box-shadow: 0 6px 20px color-mix(in srgb, var(--now) 22%, transparent); }
 .badge-now { color: var(--now); background: var(--now-soft); }
-.badge-now::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--now); animation: live 1.4s ease-out infinite; }
-@keyframes live { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--now) 60%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
+/* точка «сейчас» пульсирует кольцом через transform/opacity — без перерисовки каждый кадр */
+.badge-now { position: relative; }
+.badge-now::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--now); }
+.badge-now::after {
+  content: ""; position: absolute; left: 10px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%;
+  background: var(--now); opacity: .55; animation: live 1.4s ease-out infinite;
+}
+@keyframes live { to { transform: scale(3); opacity: 0; } }
 .badge-next { color: var(--accent); background: var(--accent-soft); }
 .status { margin-bottom: 7px; display: flex; align-items: center; gap: 8px; }
 .bar { height: 5px; border-radius: 5px; background: var(--surface-2); overflow: hidden; margin-top: 11px; }

@@ -61,6 +61,8 @@ class MainActivity : ComponentActivity() {
         web.isVerticalScrollBarEnabled = false
         web.isHorizontalScrollBarEnabled = false
         web.overScrollMode = View.OVER_SCROLL_NEVER
+        // страница небольшая — отрисовываем её заранее целиком, чтобы прокрутка и анимации не дёргались
+        web.settings.offscreenPreRaster = true
         val loader = Web.loader(this)
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
@@ -155,7 +157,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         Events.listener = null
-        WidgetUpdater.updateAll(this)
+        // виджет читает весь файл расписания (~0,5 МБ) — не на главном потоке, чтобы выход из приложения не подтормаживал
+        val app = applicationContext
+        Thread { WidgetUpdater.updateAll(app) }.start()
         super.onPause()
     }
 

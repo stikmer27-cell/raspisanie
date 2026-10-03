@@ -38,6 +38,8 @@ export function normGroup(name) {
 
 const clean = (t) => String(t || '').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
 const squash = (t) => String(t || '').replace(/\s+/g, '');
+// в ячейке есть хоть одна буква или цифра (случайный «\» в пустой ячейке — не пара)
+const meaningful = (t) => /[\p{L}\p{N}]/u.test(String(t || ''));
 const pad2 = (n) => String(n).padStart(2, '0');
 
 // ---------------------------------------------------------------- даты
@@ -105,21 +107,50 @@ const stripChars = (s, chars) => {
   return s.slice(a, b);
 };
 
-/** Лучшее усилие: 'Математика (Практические занятия) Сурмин А.Г. 101'. */
+const KIND_LEAD_RE = /^(лекци[яи]|практическ\S*\s+заняти\S*|лабораторн\S*\s+работ\S*|семинар\S*)\s+/iu;
+const normRoom = (r) => r.replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-').trim();
+const tidy = (s) => {
+  const t = stripChars(s
+    .replace(/(^|\s)[,;:]+(?=\s|$)/g, ' ') // запятая, оставшаяся от вынутых аудиторий «314, 310»
+    .replace(/\s+/g, ' ').replace(/\s+([,.;:!])/g, '$1').replace(/([,;:])(?:\s*[,;:])+/g, '$1'), ' ,;:-–—');
+  return t.replace(/^\.+\s*/, ''); // точку в конце предложения оставляем
+};
+
+/**
+ * Раскладка текста ячейки на поля: 'Математика (Практические занятия) Сурмин А.Г. 101'.
+ * Ничего не теряем: всё, что не стало видом занятия, преподавателем или аудиторией,
+ * остаётся в названии («Учебная практика — ПМ.11 Разработка…»); аудиторий может быть несколько.
+ */
 export function splitLesson(text) {
-  let subject = text, kind = '', rest = '';
-  const m = /^([^()]+?)\s*\(([^)]*)\)\.?\s*(.*)$/.exec(text);
-  if (m) [subject, kind, rest] = [m[1].trim(), m[2].trim(), m[3].trim()];
-  subject = subject.replace(/^\s*отмена\s*/i, '').trim() || subject;
-  if (isUpper(subject) && subject.length > 12) subject = subject[0].toUpperCase() + subject.slice(1).toLowerCase();
-  const roomM = ROOM_RE.exec(m ? rest : text);
-  const room = roomM ? roomM[0].replace(/\s+/g, ' ').replace(/\s*-\s*/g, '-').trim() : '';
-  let teacher = '';
-  if (m) {
-    const t = TEACHER_RE.exec(rest);
-    teacher = t ? t[0].trim() : stripChars(rest.replace(ROOM_RE_ALL, ''), ' .,');
+  const body = text.replace(/^\s*отмена[:!.\s]*/i, '').trim() || text;
+  let subject = body, kind = '', rest = '';
+  const m = /^([^()]+?)\s*\(([^)]*)\)\.?\s*(.*)$/.exec(body);
+  if (m) [subject, kind, rest] = [m[1].trim(), stripChars(m[2], ' ('), m[3].trim()];
+  else {
+    // «Лекция ИНФОРМАТИКА Читальный зал-А Белякова М.А.» — вид занятия впереди, без скобок
+    const k = KIND_LEAD_RE.exec(body);
+    if (k) { kind = k[1]; subject = body.slice(k[0].length); }
+    rest = subject;
   }
-  return { subject, kind, teacher, room };
+  // аудитории и преподаватель — из хвоста (а если скобок нет — из всего текста)
+  const rooms = [...new Set((rest.match(ROOM_RE_ALL) || []).map(normRoom))];
+  const t = TEACHER_RE.exec(rest);
+  let teacher = t ? t[0].trim() : '';
+  let extra = rest;
+  if (teacher) extra = extra.replace(t[0], ' ');
+  extra = extra.replace(ROOM_RE_ALL, ' ').replace(/(^|\s)ауд(итория)?\.?(?=\s|$)/giu, ' ');
+  if (m) {
+    // второй вид занятия в скобках в хвосте: «… ПМ.11 Разработка… (Лабораторная работа)»
+    extra = extra.replace(/\(([^)]*)\)/g, (_, k2) => { const v = tidy(k2); if (v && !kind.toLowerCase().includes(v.toLowerCase())) kind = kind ? `${kind}, ${v}` : v; return ' '; });
+    extra = tidy(extra);
+    if (!teacher && extra && !/[а-яё]{4}/.test(extra.replace(/^[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.?$/u, ''))) { teacher = extra; extra = ''; } // «Рогулин В»
+    if (/\p{L}{3}/u.test(extra)) subject = `${subject} — ${extra}`;
+  } else {
+    subject = tidy(extra) || subject;
+  }
+  if (isUpper(subject) && subject.length > 8) subject = subject[0].toUpperCase() + subject.slice(1).toLowerCase();
+  kind = tidy(kind);
+  return { subject: tidy(subject), kind, teacher, room: rooms.join(', ') };
 }
 
 // ---------------------------------------------------------------- геометрия PDF
@@ -324,14 +355,144 @@ function makeCell([x0, top, x1, bottom], text = '') {
 function fillTexts(cells, items) {
   const order = cells.map((c, i) => i).sort((i, j) =>
     (cells[i].x1 - cells[i].x0) * (cells[i].bottom - cells[i].top) - (cells[j].x1 - cells[j].x0) * (cells[j].bottom - cells[j].top));
-  const buckets = cells.map(() => []);
-  for (const it of items) {
+  const find = (x, y) => {
     for (const i of order) {
       const c = cells[i];
-      if (c.x0 <= it.xc && it.xc <= c.x1 && c.top <= it.yc && it.yc <= c.bottom) { buckets[i].push(it); break; }
+      if (c.x0 <= x && x <= c.x1 && c.top <= y && y <= c.bottom) return i;
+    }
+    return -1;
+  };
+  const at = items.map((it) => find(it.xc, it.yc));
+
+  // Текст, который не влез в ячейку, вылезает за её линию (строка перечёркнута границей).
+  // По центру такая строка попадает в соседнюю ячейку — возвращаем её к своему абзацу:
+  // туда, где ближе соседняя строка того же столбца.
+  const overlapX = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w;
+  const nearestLine = (k, cell) => {
+    let best = Infinity;
+    items.forEach((o, m) => {
+      if (m === k || at[m] !== cell || !o.horiz || !overlapX(o, items[k])) return;
+      const dy = Math.abs(o.top - items[k].top);
+      if (dy > items[k].size * 0.5) best = Math.min(best, dy); // строки той же строки не считаем
+    });
+    return best;
+  };
+  items.forEach((it, k) => {
+    const i = at[k];
+    if (i < 0 || !it.horiz) return;
+    const c = cells[i];
+    const reach = it.size * 0.4;
+    let other = -1;
+    if (it.yc - c.top < reach) other = find(it.xc, c.top - reach - 0.5);
+    else if (c.bottom - it.yc < reach) other = find(it.xc, c.bottom + reach + 0.5);
+    if (other < 0 || other === i) return;
+    const there = nearestLine(k, other), here = nearestLine(k, i);
+    if (there < here && there < it.size * 2.5) at[k] = other;
+  });
+
+  const buckets = cells.map(() => []);
+  items.forEach((it, k) => { if (at[k] >= 0) buckets[at[k]].push(it); });
+  cells.forEach((c, i) => { c.items = buckets[i]; c.text = cellText(buckets[i]); c.used = false; });
+}
+
+/**
+ * Горизонтальные «кучки» текста в ячейке: [x0, x1, items]. Строки одного абзаца перекрываются по x.
+ * Если все кучки стоят на одних и тех же строках — это один текст с большими пробелами
+ * («История (Практические занятия)        Подрезова Т.В. 105»), а не два разных.
+ */
+function textClustersX(items) {
+  const lines = [];
+  for (const it of [...items].sort((a, b) => a.top - b.top || a.x - b.x)) {
+    const ln = lines.find((l) => Math.abs(l.top - it.top) < it.size * 0.5);
+    if (ln) ln.items.push(it);
+    else lines.push({ top: it.top, items: [it] });
+  }
+  const segs = [];
+  lines.forEach((ln, li) => {
+    let cur = null;
+    for (const it of ln.items.sort((a, b) => a.x - b.x)) {
+      if (cur && it.x <= cur[1] + it.size * 1.2) { cur[1] = Math.max(cur[1], it.x + it.w); cur[2].push(it); }
+      else { cur = [it.x, it.x + it.w, [it], li]; segs.push(cur); }
+    }
+  });
+  const out = [];
+  for (const s of segs.sort((a, b) => a[0] - b[0])) {
+    const last = out[out.length - 1];
+    if (last && s[0] <= last[1] + 1) { last[1] = Math.max(last[1], s[1]); last[2].push(...s[2]); last[3].add(s[3]); }
+    else out.push([s[0], s[1], [...s[2]], new Set([s[3]])]);
+  }
+  const same = out.every((k) => k[3].size === lines.length);
+  return same ? [[Math.min(...out.map((k) => k[0])), Math.max(...out.map((k) => k[1])), items]] : out;
+}
+
+/** Вертикальные абзацы в ячейке: строки подряд (интервал меньше ~2 строк) — один абзац. */
+function textClustersY(items) {
+  const out = [];
+  for (const it of [...items].sort((a, b) => a.top - b.top)) {
+    const last = out[out.length - 1];
+    if (last && it.top - last[1] <= it.size * 2.2) { last[1] = Math.max(last[1], it.top); last[2].push(it); }
+    else out.push([it.top, it.top, [it]]);
+  }
+  return out;
+}
+
+/**
+ * В PDF бывает не нарисована вертикальная граница между соседними группами — тогда две ячейки
+ * сливаются в одну, и в ней оказываются два разных текста (каждый — под своей группой).
+ * Делим такую ячейку по колонкам: если каждый текст стоит над своими колонками и каждая колонка
+ * накрыта ровно одним текстом. Неоднозначные случаи помечаем — самопроверка выдаст предупреждение.
+ */
+function splitMergedCells(body, columns) {
+  const cols = Object.values(columns);
+  const coveredBy = (c) => cols.filter((col) => c.x0 - 1 <= col.xc && col.xc <= c.x1 + 1);
+  const textItems = (c) => (c.items || []).filter((it) => it.horiz && meaningful(it.str));
+  // части деления: [x0, x1] каждой — по своим колонкам
+  const parts = new Map();
+  for (const c of body) {
+    const covered = coveredBy(c);
+    const items = textItems(c);
+    const clusters = covered.length > 1 && items.length > 1 ? textClustersX(items) : [];
+    if (clusters.length < 2) continue;
+    const owner = covered.map((col) => {
+      const hits = clusters.map((k, i) => [i, Math.min(k[1], col.x1) - Math.max(k[0], col.x0)]).filter(([, ov]) => ov > 0.5);
+      return hits.length === 1 ? hits[0][0] : -1;
+    });
+    if (owner.some((o) => o < 0) || new Set(owner).size !== clusters.length) continue; // неоднозначно — поймает самопроверка 7
+    parts.set(c, clusters.map((_, i) => {
+      const mine = covered.filter((_, j) => owner[j] === i);
+      return [Math.max(c.x0, Math.min(...mine.map((m) => m.x0))), Math.min(c.x1, Math.max(...mine.map((m) => m.x1)))];
+    }));
+  }
+  // та же ячейка без границы бывает разрезана по высоте на куски (той же ширины, стык в стык) —
+  // их делим по тем же колонкам
+  let grown = true;
+  while (grown) {
+    grown = false;
+    for (const c of body) {
+      if (parts.has(c) || coveredBy(c).length < 2) continue;
+      for (const [s, p] of parts) {
+        if (Math.abs(s.x0 - c.x0) < 1.5 && Math.abs(s.x1 - c.x1) < 1.5 && c.bottom >= s.top - 1.5 && c.top <= s.bottom + 1.5) {
+          parts.set(c, p);
+          grown = true;
+          break;
+        }
+      }
     }
   }
-  cells.forEach((c, i) => { c.text = cellText(buckets[i]); c.used = false; });
+  const out = [];
+  for (const c of body) {
+    const p = parts.get(c);
+    if (!p) { out.push(c); continue; }
+    p.forEach(([x0, x1]) => {
+      const its = (c.items || []).filter((it) => x0 - 0.5 <= it.xc && it.xc <= x1 + 0.5);
+      const sub = makeCell([x0, c.top, x1, c.bottom], cellText(its));
+      sub.items = its;
+      sub.used = false;
+      sub.split = true;
+      out.push(sub);
+    });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- разбор таблицы
@@ -367,7 +528,7 @@ function collect(block, body, columns, special) {
   const bottom = Math.max(...block.slots.map((s) => s.bottom));
   const service = Object.values(special);
   for (const c of body) {
-    if (!clean(c.text)) continue;
+    if (!meaningful(c.text)) continue;
     if (service.some((sc) => sc.x0 - 1 <= c.xc && c.xc <= sc.x1 + 1 && c.x1 <= sc.x1 + 2)) continue;
     if (c.bottom <= top + 1 || c.top >= bottom - 1) continue;
     let hit = block.slots.filter((s) => c.top - 1 <= (s.top + s.bottom) / 2 && (s.top + s.bottom) / 2 <= c.bottom + 1);
@@ -430,7 +591,11 @@ function mergeLessons(items) {
  *     (перепутаны пары/группы) — проверка по «полосам», без геометрии ячеек;
  *  3. день недели не совпадает с датой, дни идут не по порядку, день без подписи;
  *  4. номера пар идут не подряд, время не совпадает со звонками;
- *  5. у группы в одной паре две разные записи.
+ *  5. у группы в одной паре две разные записи;
+ *  6. ячейка лишь частично заходит в колонку группы;
+ *  7. в ячейке на несколько групп — отдельные тексты над разными колонками (нет границы в PDF);
+ *  8. в ячейке на несколько пар — отдельные тексты для разных пар;
+ *  9. запись без названия предмета (обрывок текста из соседней ячейки, случайный символ).
  */
 function selfCheck({ pages, blocks, groups }) {
   const warnings = [];
@@ -469,9 +634,36 @@ function selfCheck({ pages, blocks, groups }) {
       }
     }
 
+    // 7. ячейка на несколько групп, а в ней отдельные тексты над разными колонками
+    //    (в PDF не нарисована граница между группами, и ячейку не удалось поделить)
+    for (const c of pg.body) {
+      if (!c.used) continue;
+      const covered = Object.entries(pg.columns).filter(([, col]) => c.x0 - 1 <= col.xc && col.xc <= c.x1 + 1);
+      if (covered.length < 2) continue;
+      if (textClustersX((c.items || []).filter((it) => it.horiz && meaningful(it.str))).length < 2) continue;
+      for (const [norm] of covered) warn(norm, null, `В одной ячейке несколько разных текстов: «${short(clean(c.text))}»`);
+    }
+
+    // 8. ячейка на несколько пар, а в ней отдельные тексты для каждой пары
+    //    (в PDF не нарисована граница между парами — тексты слиплись бы в одну запись)
+    for (const c of pg.body) {
+      if (!c.used) continue;
+      const hit = slots.filter((s) => s.num !== null && c.top - 1 <= (s.top + s.bottom) / 2 && (s.top + s.bottom) / 2 <= c.bottom + 1);
+      if (hit.length < 2) continue;
+      const parts = textClustersY((c.items || []).filter((it) => it.horiz && meaningful(it.str)));
+      if (parts.length < 2) continue;
+      const slotOf = (p) => hit.findIndex((s) => s.top - 1 <= p[0] - p[2][0].size && p[1] <= s.bottom + 1);
+      const own = parts.map(slotOf);
+      if (own.every((i) => i >= 0) && new Set(own).size === parts.length) {
+        for (const [norm, col] of Object.entries(pg.columns)) {
+          if (c.x0 - 1 <= col.xc && col.xc <= c.x1 + 1) warn(norm, hit[0].block && hit[0].block.date, `Ячейка на ${hit.length} пары, но в ней отдельные тексты: «${short(clean(c.text))}»`);
+        }
+      }
+    }
+
     // 1. потерянный текст
     for (const c of pg.body) {
-      if (c.used || !clean(c.text)) continue;
+      if (c.used || !meaningful(c.text)) continue;
       if (service.some((sc) => sc.x0 - 1 <= c.xc && c.xc <= sc.x1 + 1 && c.x1 <= sc.x1 + 2)) continue;
       if (!groupCols.some((col) => c.x0 - 1 <= col.xc && col.xc <= c.x1 + 1)) continue;
       if (c.bottom <= top + 1 || c.top >= bottom - 1) continue;
@@ -486,7 +678,11 @@ function selfCheck({ pages, blocks, groups }) {
         for (const it of pg.items) {
           if (it.xc < col.x0 + 0.5 || it.xc > col.x1 - 0.5 || it.yc < s.top || it.yc > s.bottom) continue;
           const want = squash(it.str);
-          if (want && !got.includes(want)) {
+          // строка, вылезшая за границу пары (не влезла в ячейку), может принадлежать соседней паре
+          const near = (dy) => slots.find((o) => o !== s && o.top <= it.yc + dy && it.yc + dy <= o.bottom);
+          const spill = it.yc - s.top < it.size * 0.4 ? near(-it.size * 0.8) : s.bottom - it.yc < it.size * 0.4 ? near(it.size * 0.8) : null;
+          if (spill && (bySlot.get(`${norm}|${spill.id}`) || '').includes(want)) continue;
+          if (want && meaningful(want) && !got.includes(want)) {
             warn(norm, date, `${s.num ? s.num + ' пара' : 'строка ' + (s.start || '')}: «${short(it.str.trim())}» не совпал с разобранным «${short(got) || 'пусто'}»`);
           }
         }
@@ -518,6 +714,17 @@ function selfCheck({ pages, blocks, groups }) {
     if (b.date && seen.has(b.date)) warn(null, b.date, 'День встречается в PDF дважды');
     if (b.date && prevDate && b.date < prevDate) warn(null, b.date, 'Дни идут не по порядку');
     if (b.date) { seen.add(b.date); prevDate = b.date; }
+  }
+
+  // 9. запись без названия — только преподаватель / аудитория / знаки: обрывок чужого текста
+  //    (вылез из соседней ячейки) или случайный символ в пустой ячейке
+  for (const [norm, g] of Object.entries(groups)) {
+    for (const [date, ls] of Object.entries(g.days)) {
+      for (const l of ls) {
+        const rest = l.text.replace(new RegExp(TEACHER_RE.source, 'gu'), ' ').replace(ROOM_RE_ALL, ' ').replace(/[^\p{L}]+/gu, '');
+        if (rest.length < 3) warn(norm, date, `${l.pairs.length ? l.pairs.join('–') + ' пара' : 'запись'}: нет названия — «${short(l.text)}»`);
+      }
+    }
   }
 
   // 5. две разные записи в одной паре
@@ -573,7 +780,7 @@ export async function parsePdf(pdfjs, bytes, fallbackWeekDate = null) {
       if (!Object.keys(special).length) continue;
 
       const inCol = (c, col) => col.x0 - 1 <= c.xc && c.xc <= col.x1 + 1;
-      const body = cells.filter((c) => c.top >= headerBottom - 1);
+      const body = splitMergedCells(cells.filter((c) => c.top >= headerBottom - 1), columns);
       const rowCol = special.time || special.num;
       const timeCells = body.filter((c) => inCol(c, rowCol)).sort((a, b) => a.top - b.top);
       const numCells = special.num ? body.filter((c) => inCol(c, special.num)) : [];
@@ -739,8 +946,15 @@ export function findSources(html) {
 }
 
 /**
+ * Версия разбора. Меняется при любом исправлении разбора PDF: старые результаты из кэша
+ * (разобранные прошлой версией приложения) тогда выбрасываются и всё разбирается заново.
+ */
+export const PARSER_VERSION = 4;
+
+/**
  * Скачивает страницу и PDF, собирает расписание всех групп.
- * cache: {url: разобранный PDF} — PDF с тем же адресом повторно не качаем.
+ * cache: {url: разобранный PDF} — PDF с тем же адресом повторно не качаем (если разобран этой же версией).
+ * fresh в ответе — сколько PDF разобрано заново (значит, кэш надо сохранить).
  */
 export async function buildSchedule({ pdfjs, fetchText, fetchBytes, prev = null, cache = {}, today }) {
   const { sources, week } = findSources(await fetchText(PAGE));
@@ -749,12 +963,17 @@ export async function buildSchedule({ pdfjs, fetchText, fetchBytes, prev = null,
   const errors = [];
   const groups = {};
   const newCache = {};
+  let fresh = 0;
   const order = sources.map((s, i) => [i, s]).sort((a, b) => (a[1].date || '0000').localeCompare(b[1].date || '0000'));
   for (const [idx, src] of order) {
     let parsed = cache[src.url];
+    if (parsed && parsed.v !== PARSER_VERSION) parsed = null;
     if (!parsed) {
       try {
-        parsed = await parsePdf(pdfjs, await fetchBytes(src.url), src.date || today);
+        // pdfjs можно передать функцией — тогда библиотека грузится, только если есть что разбирать
+        const lib = typeof pdfjs === 'function' ? await pdfjs() : pdfjs;
+        parsed = { ...(await parsePdf(lib, await fetchBytes(src.url), src.date || today)), v: PARSER_VERSION };
+        fresh++;
       } catch (e) {
         errors.push(`${src.title}: ${e && e.message ? e.message : e}`);
         continue;
@@ -795,6 +1014,7 @@ export async function buildSchedule({ pdfjs, fetchText, fetchBytes, prev = null,
   return {
     data: { week, sources: sources.map(({ title, url }) => ({ title, url })), groups: sortedGroups },
     cache: newCache,
+    fresh,
     errors,
   };
 }
@@ -938,7 +1158,8 @@ export function dayMessage(data, group, day, today) {
 
 /** Первая пара по снимку уже присланного расписания ([номер, текст]). */
 function snapshotFirst(snap) {
-  const nums = (snap || []).filter(([k, t]) => /^\d/.test(k) && !String(t).toLowerCase().includes('отмен')).map(([k]) => parseInt(k, 10));
+  // только номера пар («2», «1–2»); у записей без пары в снимке время «13:00» — их не считаем
+  const nums = (snap || []).filter(([k, t]) => /^\d+(–\d+)?$/.test(k) && !String(t).toLowerCase().includes('отмен')).map(([k]) => parseInt(k, 10));
   return nums.length ? Math.min(...nums) : null;
 }
 
