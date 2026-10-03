@@ -148,7 +148,7 @@ export function groupSubjects(data, group, questions = []) {
   const g = data && data.groups && data.groups[normGroup(group)];
   const set = new Set(questions.map((q) => q.subject).filter(Boolean));
   for (const ls of Object.values((g && g.days) || {})) {
-    for (const l of ls) if (l.pairs.length && !l.cancelled && l.subject && l.subject.length < 80) set.add(l.subject.split(' — ')[0]);
+    for (const l of ls) if (l.pairs.length && !l.cancelled && l.subject && l.subject.length < 80) set.add(l.subject.split(': ')[0]);
   }
   return [...set].filter((s) => !NOT_SUBJECT.test(s)).sort((a, b) => a.localeCompare(b, 'ru'));
 }
@@ -333,8 +333,8 @@ export function decideExtras({ extras, data, state, cfg, today }) {
     let body = f.title;
     if (f.kind === 'retake' && debts.length) {
       body = f.hits.length
-        ? `Там есть: ${f.hits.join(', ')}. Открой файл — в нём дата, время и аудитория.`
-        : `Твоих предметов (${debts.join(', ')}) в файле не нашлось — на всякий случай проверь сам.`;
+        ? `Там есть: ${f.hits.join(', ')}. Открой файл, в нём дата, время и аудитория.`
+        : `Твоих предметов (${debts.join(', ')}) в файле не нашлось. На всякий случай проверь сам.`;
     }
     messages.push({ kind: 'session', tag: `session-${f.url}`, url: f.url, title: `📅 Выложили ${what}`, body });
   }

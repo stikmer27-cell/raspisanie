@@ -129,7 +129,7 @@ object Updater {
     private fun verify(ctx: Context, file: File) {
         val pm = ctx.packageManager
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
-        val apk = pm.getPackageArchiveInfo(file.path, flags) ?: throw IOException("скачанный файл — не APK")
+        val apk = pm.getPackageArchiveInfo(file.path, flags) ?: throw IOException("скачанный файл не является APK")
         val mine = pm.getPackageInfo(ctx.packageName, flags)
         if (apk.packageName != ctx.packageName) throw IOException("в APK другое приложение")
         if (versionCode(apk) <= versionCode(mine)) throw IOException("APK не новее установленного")

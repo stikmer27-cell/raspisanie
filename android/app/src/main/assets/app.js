@@ -48,7 +48,7 @@ const pairsWord = (n) => `${n} ${plural(n, 'пара', 'пары', 'пар')}`;
 /** Мини-расписание дня в кнопке: точка на каждую пару, пустая — пары нет. */
 function pairDots(ls) {
   const plan = dayPlan(ls);
-  if (!plan) return ls.length ? '✕' : '—';
+  if (!plan) return ls.length ? '✕' : '-';
   const busy = new Set(active(ls).flatMap((l) => l.pairs));
   const last = Math.max(...busy);
   let html = '';
@@ -243,7 +243,7 @@ function watchRunning() {
 function refresh(manual = true) {
   if (manual) {
     S.manual = true;
-    toast(S.cfg.running ? 'Уже проверяю сайт…' : 'Проверяю сайт колледжа…');
+    toast(S.cfg.running ? 'Уже проверяю сайт...' : 'Проверяю сайт колледжа...');
   }
   if (!S.cfg.running) native.refresh();
   S.cfg.running = true;
@@ -265,7 +265,7 @@ window.onNative = async (type, arg) => {
     render('fade');
     if (S.manual) {
       if (info.error) toast('Не получилось связаться с сайтом');
-      else toast(info.changed ? 'Расписание обновлено' : 'Изменений нет — всё актуально');
+      else toast(info.changed ? 'Расписание обновлено' : 'Изменений нет, всё актуально');
     }
     S.manual = false;
   } else if (type === 'resume') {
@@ -309,16 +309,16 @@ function renderUpdateBar() {
   bar.innerHTML = u.pending
     ? `${ICONS.bolt}<div><b>Вышло обновление ${esc(u.pending)}</b><span>Поставится само, когда выйдешь из приложения</span></div>
       <button type="button" class="btn press" data-act="update-now">Обновить</button>`
-    : `${ICONS.bolt}<div><b>Включи автообновление</b><span>Один раз разреши «Расписанию» ставить свои обновления</span></div>
+    : `${ICONS.bolt}<div><b>Включи автообновление</b><span>Один раз разреши приложению ставить свои обновления</span></div>
       <button type="button" class="btn press" data-act="allow-install">Разрешить</button>
       <button type="button" class="x press" data-act="hide-allow" aria-label="Скрыть">✕</button>`;
 }
 
 function updateState(u) {
   if (!u.enabled) return 'выключено в этой сборке';
-  if (u.canInstall === false) return 'нужно один раз разрешить установку обновлений — иначе телефон будет каждый раз спрашивать';
-  if (u.busy) return 'проверяю…';
-  if (u.pending) return `скачана версия ${u.pending} — поставится, когда выйдешь из приложения`;
+  if (u.canInstall === false) return 'нужно один раз разрешить установку обновлений, иначе телефон будет каждый раз спрашивать';
+  if (u.busy) return 'проверяю...';
+  if (u.pending) return `скачана версия ${u.pending}, поставится, когда выйдешь из приложения`;
   if (u.error) return `не получилось: ${u.error}`;
   if (u.checked) return `у тебя последняя версия · проверено ${longDate(u.checked)}`;
   return 'ещё не проверял';
@@ -371,7 +371,7 @@ function renderStatus() {
   sub.classList.remove('err');
   $('#refreshBtn').classList.toggle('spin', !!S.cfg.running);
   const week = S.data && S.data.week ? S.data.week.replace(/^.*·\s*/, '') : '';
-  if (S.cfg.running) sub.textContent = 'Проверяю сайт колледжа…';
+  if (S.cfg.running) sub.textContent = 'Проверяю сайт колледжа...';
   else if (S.cfg.lastError && S.data) { sub.textContent = `Нет связи с сайтом · показаны данные на ${hhmm(S.cfg.lastOk || Date.now())}`; sub.classList.add('err'); }
   else if (S.cfg.lastOk) sub.textContent = [week, `проверено в ${hhmm(S.cfg.lastOk)}`].filter(Boolean).join(' · ');
   else sub.textContent = week || ' ';
@@ -404,7 +404,7 @@ function renderOnboarding() {
     setHtml(view, 'view', `<div class="onb">
       ${STICKERS.group}
       <h2>Привет!</h2>
-      <p>Впиши свою группу — покажу расписание и буду присылать уведомления.</p>
+      <p>Впиши свою группу, и я покажу расписание и буду присылать уведомления.</p>
       <form id="onbForm" autocomplete="off">
         <input id="onbInput" class="search big" placeholder="например, 2401а1" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
         <div id="onbHint" class="onb-hint"></div>
@@ -437,7 +437,7 @@ function updateOnboarding(errorText) {
   } else {
     hint.textContent = nq ? '' : `В расписании ${groups.length} ${plural(groups.length, 'группа', 'группы', 'групп')}`;
     sugg = nq ? groups.filter(([k]) => k.includes(nq)).slice(0, 12) : [];
-    if (nq && !sugg.length) hint.textContent = 'Такой группы пока не видно — проверь написание';
+    if (nq && !sugg.length) hint.textContent = 'Такой группы пока не видно, проверь написание';
   }
   $('#onbSugg').innerHTML = sugg.map(([k, g], i) =>
     `<button type="button" class="press ${k === nq ? 'exact' : ''}" data-pick="${esc(k)}" style="--i:${i}">${esc(g.name)}</button>`).join('');
@@ -501,7 +501,7 @@ function render(anim) {
   if (!S.data) {
     setHtml($('#days'), 'days', '');
     const changed = S.cfg.lastError && !S.cfg.running
-      ? setHtml(view, 'view', empty('offline', 'Нет связи с сайтом', 'Проверь интернет — и попробуем ещё раз.', '<button class="btn press" data-act="retry">Повторить</button>'))
+      ? setHtml(view, 'view', empty('offline', 'Нет связи с сайтом', 'Проверь интернет и попробуй ещё раз.', '<button class="btn press" data-act="retry">Повторить</button>'))
       : setHtml(view, 'view', empty('load', 'Загружаю расписание', 'Скачиваю PDF с сайта колледжа и разбираю его. Это займёт несколько секунд.'));
     if (changed) animate(view, 'fade');
     renderFoot();
@@ -509,7 +509,7 @@ function render(anim) {
   }
   if (!g) {
     setHtml($('#days'), 'days', '');
-    if (setHtml(view, 'view', empty('group', 'Выбери свою группу', `Группа «${esc(S.cfg.group || '')}» не нашлась в расписании.`, '<button class="btn press" data-act="group">Выбрать группу</button>'))) animate(view, 'fade');
+    if (setHtml(view, 'view', empty('group', 'Выбери свою группу', `Группа ${esc(S.cfg.group || '')} не нашлась в расписании.`, '<button class="btn press" data-act="group">Выбрать группу</button>'))) animate(view, 'fade');
     renderFoot();
     return;
   }
@@ -599,7 +599,7 @@ function dayHtml(g, d) {
   const isToday = d === today;
   // день ещё не начался — крупно «к какой паре приходить»; когда пары идут, хватит короткой сводки
   const upcoming = plan && (d > today || (isToday && min < toMin(plan.start)));
-  const sum = plan && !upcoming ? `${pairsWord(plan.count)} · ${plan.start}–${plan.end}` : '';
+  const sum = plan && !upcoming ? `${pairsWord(plan.count)} · ${plan.start}-${plan.end}` : '';
   let html = `<div class="day-head"><h2>${esc(cap(title))}</h2><span class="sum">${sum}</span></div>`;
   if (upcoming) html += arriveHtml(plan);
 
@@ -611,7 +611,7 @@ function dayHtml(g, d) {
   }
 
   if (ls === undefined) {
-    return html + empty('wait', 'Расписание ещё не выложили', 'Как только на сайте появится PDF — пришлю уведомление.');
+    return html + empty('wait', 'Расписание ещё не выложили', 'Как только на сайте появится PDF, пришлю уведомление.');
   }
   if (!ls.length) return html + empty('free', 'Пар нет', 'Можно отдыхать!');
   if (!act.length) {
@@ -641,12 +641,12 @@ function arriveHtml(plan) {
   const sub = [cap(note), `${pairsWord(plan.count)}${plan.end ? `, до ${plan.end}` : ''}`].filter(Boolean).join(' · ');
   return `<div class="arrive${plan.late ? ' late' : ''}">
     <div class="arrive-num" aria-hidden="true">${plan.first}</div>
-    <div class="arrive-text"><b>${cap(toPair(plan.first))} — ${plan.start}</b><span>${sub}</span></div>
+    <div class="arrive-text"><b>${cap(toPair(plan.first))}, в ${plan.start}</b><span>${sub}</span></div>
   </div>`;
 }
 
 function slotCard(s, past, gapMin, i) {
-  const num = s.pairs.length > 1 ? `${s.pairs[0]}–${s.pairs[s.pairs.length - 1]}` : s.pairs[0];
+  const num = s.pairs.length > 1 ? `${s.pairs[0]}-${s.pairs[s.pairs.length - 1]}` : s.pairs[0];
   const text = s.kind === 'gap' ? `Окно${gapMin > 0 ? ` · ${dur(gapMin)}` : ''}` : (s.pairs.length > 1 ? 'Пар нет' : 'Пары нет');
   return `<article class="lesson slot ${s.kind}${past ? ' past' : ''}" style="--i:${i}">
     <div class="when"><div class="num">${num}</div><div class="t">${s.start || ''}</div></div>
@@ -671,7 +671,7 @@ function lessonCard(l, isToday, min, isNext, i) {
     }
   }
   if (l.cancelled) status = `<div class="status"><span class="pill badge-cancel">Отменено</span></div>`;
-  const num = l.pairs.length ? (l.pairs.length > 1 ? `${l.pairs[0]}–${l.pairs[l.pairs.length - 1]}` : l.pairs[0]) : '·';
+  const num = l.pairs.length ? (l.pairs.length > 1 ? `${l.pairs[0]}-${l.pairs[l.pairs.length - 1]}` : l.pairs[0]) : '·';
   const time = l.start ? `${l.start}${l.end ? '<br>' + l.end : ''}` : '';
   const kind = kindInfo(l.kind);
   const meta = [
@@ -747,9 +747,9 @@ function renderSettings() {
         ${c.notifications ? yes : '<button type="button" class="btn press" data-act="notif">Разрешить</button>'}</div>
       <div class="state"><span class="lbl">Работа в фоне<small>${c.battery ? 'телефон не мешает проверкам' : 'экономия батареи может задерживать уведомления'}</small></span>
         ${c.battery ? yes : '<button type="button" class="btn press" data-act="battery">Разрешить</button>'}</div>
-      ${u.enabled ? `<div class="state"><span class="lbl">Установка обновлений<small>${u.canInstall === false ? 'разреши один раз — и новые версии будут ставиться сами' : 'разрешена — новые версии ставятся сами'}</small></span>
+      ${u.enabled ? `<div class="state"><span class="lbl">Установка обновлений<small>${u.canInstall === false ? 'разреши один раз, и новые версии будут ставиться сами' : 'разрешена, новые версии ставятся сами'}</small></span>
         ${u.canInstall === false ? '<button type="button" class="btn press" data-act="allow-install">Разрешить</button>' : yes}</div>` : ''}
-      <div class="state"><span class="lbl">Проверка сайта<small>${c.running ? 'идёт сейчас…' : last}${c.lastError ? ' · последняя попытка не удалась' : ''}</small></span>
+      <div class="state"><span class="lbl">Проверка сайта<small>${c.running ? 'идёт сейчас...' : last}${c.lastError ? ' · последняя попытка не удалась' : ''}</small></span>
         ${c.lastError ? '<span class="bad">!</span>' : c.lastOk ? yes : ''}</div>
       <div class="row">
         <button type="button" class="btn press" data-act="test">${ICONS.bell} Тестовое уведомление</button>
@@ -776,12 +776,12 @@ function renderSettings() {
     <section class="card-flat">
       <h3>${ICONS.clock} Когда присылать</h3>
       <div class="times">
-        <label>Вечером — на завтра<input type="time" id="tEvening" value="${esc(c.evening_time || '20:00')}"></label>
-        <label>Утром — на сегодня<input type="time" id="tMorning" value="${esc(c.morning_time || '07:00')}"></label>
+        <label>Вечером, на завтра<input type="time" id="tEvening" value="${esc(c.evening_time || '20:00')}"></label>
+        <label>Утром, на сегодня<input type="time" id="tMorning" value="${esc(c.morning_time || '07:00')}"></label>
       </div>
-      <p class="hint">А если расписание поменяют — сразу. Сайт проверяется примерно раз в полчаса.</p>
+      <p class="hint">А если расписание поменяют, пришлю сразу. Сайт проверяется примерно раз в полчаса.</p>
     </section>
-    <p class="hint">Группа: <b>${esc((S.data && S.data.groups[S.group] && S.data.groups[S.group].name) || c.group || '—')}</b></p>`;
+    <p class="hint">Группа: <b>${esc((S.data && S.data.groups[S.group] && S.data.groups[S.group].name) || c.group || 'не выбрана')}</b></p>`;
   const save = () => {
     const e = $('#tEvening').value, m = $('#tMorning').value;
     if (/^\d{2}:\d{2}$/.test(e) && /^\d{2}:\d{2}$/.test(m)) {
@@ -824,7 +824,7 @@ document.addEventListener('click', (e) => {
   if (!act) return;
   e.preventDefault();
   const a = act.dataset.act;
-  if (a === 'retry' || a === 'check') { refresh(true); if (a === 'check') toast('Проверяю…'); }
+  if (a === 'retry' || a === 'check') { refresh(true); if (a === 'check') toast('Проверяю...'); }
   else if (a === 'group') openGroups();
   else if (a === 'pdf') native.openUrl(sourceUrl());
   else if (a === 'site') native.openUrl('https://ci.nsu.ru/education/schedule/');
@@ -843,21 +843,21 @@ document.addEventListener('click', (e) => {
     if (native.checkUpdate) native.checkUpdate();
     S.cfg.update = { ...(S.cfg.update || {}), busy: true };
     renderSettings();
-    toast('Ищу новую версию…');
+    toast('Ищу новую версию...');
   } else if (a === 'update-now') {
     if (native.installUpdate) native.installUpdate();
-    toast('Обновляю — приложение закроется и пришлёт уведомление, когда всё готово');
+    toast('Обновляю. Приложение закроется и пришлёт уведомление, когда всё будет готово');
   } else if (a === 'allow-install') {
     if (native.openInstallSettings) native.openInstallSettings();
-    toast('Включи «Разрешить установку из этого источника» и вернись назад');
+    toast('Включи "Разрешить установку из этого источника" и вернись назад');
   } else if (a === 'hide-allow') {
     try { localStorage.setItem('hideAllowInstall', '1'); } catch { /* */ }
     renderUpdateBar();
-    toast('Разрешить можно потом в 🔔 → Установка обновлений');
+    toast('Разрешить можно потом в настройках (колокольчик сверху)');
   } else if (a === 'widget') {
     const ok = native.pinWidget && native.pinWidget();
-    toast(ok ? 'Подтверди добавление — виджет появится на главном экране'
-      : 'Зажми пустое место на главном экране → Виджеты → Расписание');
+    toast(ok ? 'Подтверди добавление, и виджет появится на главном экране'
+      : 'Зажми пустое место на главном экране, выбери Виджеты, потом Расписание');
   }
 });
 

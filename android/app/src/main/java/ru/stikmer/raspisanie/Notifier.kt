@@ -26,7 +26,7 @@ object Notifier {
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
         nm.createNotificationChannel(
             NotificationChannel(CH_DAILY, "Расписание на день", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Вечером — пары на завтра, утром — на сегодня"
+                description = "Вечером пары на завтра, утром на сегодня"
             },
         )
         nm.createNotificationChannel(
@@ -150,7 +150,7 @@ object Notifier {
         NotificationCompat.Builder(ctx, CH_SERVICE)
             .setSmallIcon(R.drawable.ic_stat)
             .setColor(ACCENT)
-            .setContentTitle("Проверяю расписание…")
+            .setContentTitle("Проверяю расписание...")
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
             .build()

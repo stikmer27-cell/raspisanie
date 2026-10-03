@@ -144,7 +144,7 @@ export function splitLesson(text) {
     extra = extra.replace(/\(([^)]*)\)/g, (_, k2) => { const v = tidy(k2); if (v && !kind.toLowerCase().includes(v.toLowerCase())) kind = kind ? `${kind}, ${v}` : v; return ' '; });
     extra = tidy(extra);
     if (!teacher && extra && !/[а-яё]{4}/.test(extra.replace(/^[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.?$/u, ''))) { teacher = extra; extra = ''; } // «Рогулин В»
-    if (/\p{L}{3}/u.test(extra)) subject = `${subject} — ${extra}`;
+    if (/\p{L}{3}/u.test(extra)) subject = `${subject}: ${extra}`;
   } else {
     subject = tidy(extra) || subject;
   }
@@ -600,7 +600,7 @@ function mergeLessons(items) {
 function selfCheck({ pages, blocks, groups }) {
   const warnings = [];
   const warn = (group, date, msg) => warnings.push({ group, date, msg });
-  const short = (s) => (s.length > 60 ? s.slice(0, 57) + '…' : s);
+  const short = (s) => (s.length > 60 ? s.slice(0, 57) + '...' : s);
 
   // индекс: группа + строка-пара -> текст разобранных пар
   const bySlot = new Map();
@@ -629,7 +629,7 @@ function selfCheck({ pages, blocks, groups }) {
       if (!c.used) continue;
       for (const [norm, col] of Object.entries(pg.columns)) {
         if (c.x0 - 1 <= col.xc && col.xc <= c.x1 + 1 && (c.x0 > col.x0 + 2 || c.x1 < col.x1 - 2)) {
-          warn(norm, null, `Ячейка «${short(clean(c.text))}» лишь частично заходит в колонку группы`);
+          warn(norm, null, `Ячейка "${short(clean(c.text))}" лишь частично заходит в колонку группы`);
         }
       }
     }
@@ -641,7 +641,7 @@ function selfCheck({ pages, blocks, groups }) {
       const covered = Object.entries(pg.columns).filter(([, col]) => c.x0 - 1 <= col.xc && col.xc <= c.x1 + 1);
       if (covered.length < 2) continue;
       if (textClustersX((c.items || []).filter((it) => it.horiz && meaningful(it.str))).length < 2) continue;
-      for (const [norm] of covered) warn(norm, null, `В одной ячейке несколько разных текстов: «${short(clean(c.text))}»`);
+      for (const [norm] of covered) warn(norm, null, `В одной ячейке несколько разных текстов: "${short(clean(c.text))}"`);
     }
 
     // 8. ячейка на несколько пар, а в ней отдельные тексты для каждой пары
@@ -656,7 +656,7 @@ function selfCheck({ pages, blocks, groups }) {
       const own = parts.map(slotOf);
       if (own.every((i) => i >= 0) && new Set(own).size === parts.length) {
         for (const [norm, col] of Object.entries(pg.columns)) {
-          if (c.x0 - 1 <= col.xc && col.xc <= c.x1 + 1) warn(norm, hit[0].block && hit[0].block.date, `Ячейка на ${hit.length} пары, но в ней отдельные тексты: «${short(clean(c.text))}»`);
+          if (c.x0 - 1 <= col.xc && col.xc <= c.x1 + 1) warn(norm, hit[0].block && hit[0].block.date, `Ячейка на ${hit.length} пары, но в ней отдельные тексты: "${short(clean(c.text))}"`);
         }
       }
     }
@@ -667,7 +667,7 @@ function selfCheck({ pages, blocks, groups }) {
       if (service.some((sc) => sc.x0 - 1 <= c.xc && c.xc <= sc.x1 + 1 && c.x1 <= sc.x1 + 2)) continue;
       if (!groupCols.some((col) => c.x0 - 1 <= col.xc && col.xc <= c.x1 + 1)) continue;
       if (c.bottom <= top + 1 || c.top >= bottom - 1) continue;
-      warn(null, null, `Текст не попал ни в одну пару: «${short(clean(c.text))}»`);
+      warn(null, null, `Текст не попал ни в одну пару: "${short(clean(c.text))}"`);
     }
 
     // 2. полосы «колонка группы × строка пары»
@@ -683,7 +683,7 @@ function selfCheck({ pages, blocks, groups }) {
           const spill = it.yc - s.top < it.size * 0.4 ? near(-it.size * 0.8) : s.bottom - it.yc < it.size * 0.4 ? near(it.size * 0.8) : null;
           if (spill && (bySlot.get(`${norm}|${spill.id}`) || '').includes(want)) continue;
           if (want && meaningful(want) && !got.includes(want)) {
-            warn(norm, date, `${s.num ? s.num + ' пара' : 'строка ' + (s.start || '')}: «${short(it.str.trim())}» не совпал с разобранным «${short(got) || 'пусто'}»`);
+            warn(norm, date, `${s.num ? s.num + ' пара' : 'строка ' + (s.start || '')}: "${short(it.str.trim())}" не совпал с разобранным "${short(got) || 'пусто'}"`);
           }
         }
       }
@@ -709,8 +709,8 @@ function selfCheck({ pages, blocks, groups }) {
   const seen = new Set();
   let prevDate = null;
   for (const [b] of blocks) {
-    if (!b.named) warn(null, b.date, 'День без подписи в PDF — определён по порядку');
-    if (b.labelDate && weekday(b.labelDate) !== b.weekday) warn(null, b.date, `Дата ${b.labelDate} не совпадает с днём недели «${WEEKDAYS[b.weekday]}»`);
+    if (!b.named) warn(null, b.date, 'День без подписи в PDF, определён по порядку');
+    if (b.labelDate && weekday(b.labelDate) !== b.weekday) warn(null, b.date, `Дата ${b.labelDate} не совпадает с днём недели "${WEEKDAYS[b.weekday]}"`);
     if (b.date && seen.has(b.date)) warn(null, b.date, 'День встречается в PDF дважды');
     if (b.date && prevDate && b.date < prevDate) warn(null, b.date, 'Дни идут не по порядку');
     if (b.date) { seen.add(b.date); prevDate = b.date; }
@@ -722,7 +722,7 @@ function selfCheck({ pages, blocks, groups }) {
     for (const [date, ls] of Object.entries(g.days)) {
       for (const l of ls) {
         const rest = l.text.replace(new RegExp(TEACHER_RE.source, 'gu'), ' ').replace(ROOM_RE_ALL, ' ').replace(/[^\p{L}]+/gu, '');
-        if (rest.length < 3) warn(norm, date, `${l.pairs.length ? l.pairs.join('–') + ' пара' : 'запись'}: нет названия — «${short(l.text)}»`);
+        if (rest.length < 3) warn(norm, date, `${l.pairs.length ? l.pairs.join('-') + ' пара' : 'запись'}: нет названия, только "${short(l.text)}"`);
       }
     }
   }
@@ -733,7 +733,7 @@ function selfCheck({ pages, blocks, groups }) {
       const taken = new Map();
       for (const l of ls) {
         for (const p of l.pairs) {
-          if (taken.has(p) && taken.get(p) !== l.text) warn(norm, date, `${p} пара: две разные записи — «${short(taken.get(p))}» и «${short(l.text)}»`);
+          if (taken.has(p) && taken.get(p) !== l.text) warn(norm, date, `${p} пара: две разные записи, "${short(taken.get(p))}" и "${short(l.text)}"`);
           taken.set(p, l.text);
         }
       }
@@ -949,7 +949,7 @@ export function findSources(html) {
  * Версия разбора. Меняется при любом исправлении разбора PDF: старые результаты из кэша
  * (разобранные прошлой версией приложения) тогда выбрасываются и всё разбирается заново.
  */
-export const PARSER_VERSION = 4;
+export const PARSER_VERSION = 5;
 
 /**
  * Скачивает страницу и PDF, собирает расписание всех групп.
@@ -982,7 +982,7 @@ export async function buildSchedule({ pdfjs, fetchText, fetchBytes, prev = null,
     newCache[src.url] = parsed;
     const srcWarnings = [...parsed.warnings];
     if (src.date && parsed.dates.length && !parsed.dates.includes(src.date) && weekday(src.date) !== 6) {
-      srcWarnings.push({ group: null, date: null, msg: `Файл подписан «на ${src.date}», но этого дня в нём нет` });
+      srcWarnings.push({ group: null, date: null, msg: `Файл подписан "на ${src.date}", но этого дня в нём нет` });
     }
     for (const [norm, g] of Object.entries(parsed.groups)) {
       const cur = (groups[norm] ||= { name: g.name, source: idx, days: {} });
@@ -1034,10 +1034,19 @@ function shortKind(kind) {
   return (kind || '').trim();
 }
 
+/** Номер пары для текста: «2», «1-2». */
 function pairLabel(l) {
   const p = l.pairs;
   if (!p.length) return l.start || '·';
-  return p.length === 1 ? `${p[0]}` : `${p[0]}–${p[p.length - 1]}`;
+  return p.length === 1 ? `${p[0]}` : `${p[0]}-${p[p.length - 1]}`;
+}
+
+// Ключ пары в снимках уже присланных уведомлений (state.json). Формат не меняем: иначе после
+// обновления приложения все прошлые снимки «не совпали» бы и пришли ложные «Изменения».
+function pairKey(l) {
+  const p = l.pairs;
+  if (!p.length) return l.start || '·';
+  return p.length === 1 ? `${p[0]}` : `${p[0]}\u2013${p[p.length - 1]}`;
 }
 
 // ---------------------------------------------------------------- к какой паре приходить
@@ -1101,8 +1110,8 @@ export function lateNote(plan) {
   return `первых ${ORD_GEN[k] || k} пар нет`;
 }
 
-const slotLabel = (s) => (s.pairs.length > 1 ? `${s.pairs[0]}–${s.pairs[s.pairs.length - 1]}` : `${s.pairs[0]}`);
-const slotLine = (s) => `${slotLabel(s)}. — ${s.kind === 'gap' ? 'окно' : s.pairs.length > 1 ? 'пар нет' : 'пары нет'}`;
+const slotLabel = (s) => (s.pairs.length > 1 ? `${s.pairs[0]}-${s.pairs[s.pairs.length - 1]}` : `${s.pairs[0]}`);
+const slotLine = (s) => `${slotLabel(s)}. ${s.kind === 'gap' ? 'Окно' : s.pairs.length > 1 ? 'Пар нет' : 'Пары нет'}`;
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 function lessonLine(l) {
@@ -1125,7 +1134,7 @@ function dayName(day, today) {
 function daySnapshot(data, group, day) {
   const g = data.groups[group];
   if (!g || !(day in g.days)) return null;
-  return g.days[day].map((l) => [pairLabel(l), l.text]);
+  return g.days[day].map((l) => [pairKey(l), l.text]);
 }
 
 export function dayMessage(data, group, day, today) {
@@ -1159,7 +1168,7 @@ export function dayMessage(data, group, day, today) {
 /** Первая пара по снимку уже присланного расписания ([номер, текст]). */
 function snapshotFirst(snap) {
   // только номера пар («2», «1–2»); у записей без пары в снимке время «13:00» — их не считаем
-  const nums = (snap || []).filter(([k, t]) => /^\d+(–\d+)?$/.test(k) && !String(t).toLowerCase().includes('отмен')).map(([k]) => parseInt(k, 10));
+  const nums = (snap || []).filter(([k, t]) => /^\d+([–-]\d+)?$/.test(k) && !String(t).toLowerCase().includes('отмен')).map(([k]) => parseInt(k, 10));
   return nums.length ? Math.min(...nums) : null;
 }
 
@@ -1167,10 +1176,10 @@ function changeMessage(data, group, day, today, old) {
   const name = dayName(day, today);
   if (old === null) {
     const msg = dayMessage(data, group, day, today);
-    return { ...msg, title: '📅 Выложили расписание — ' + msg.title };
+    return { ...msg, title: '📅 Выложили расписание. ' + msg.title };
   }
   const neu = data.groups[group].days[day];
-  const newBy = new Map(neu.map((l) => [pairLabel(l), l]));
+  const newBy = new Map(neu.map((l) => [pairKey(l), l]));
   const oldBy = new Map(old.map(([k, t]) => [k, t]));
   const keys = [...new Set([...newBy.keys(), ...oldBy.keys()])].sort((a, b) => {
     const da = /^\d/.test(a) ? 0 : 1, db = /^\d/.test(b) ? 0 : 1;
@@ -1183,7 +1192,7 @@ function changeMessage(data, group, day, today, old) {
   let title = `⚠️ Изменения: ${name}`;
   if (plan && was !== null && plan.first !== was) {
     title = `⚠️ ${name}: теперь ${toPair(plan.first)} (${plan.start})`;
-    lines.push(`👉 Теперь ${toPair(plan.first)}, в ${plan.start}${plan.late ? ` — ${lateNote(plan)}` : ''}`);
+    lines.push(`👉 Теперь ${toPair(plan.first)}, в ${plan.start}${plan.late ? `. ${cap(lateNote(plan))}` : ''}`);
   } else if (!plan && was !== null) {
     lines.push('👉 Пар не будет');
   }
@@ -1209,7 +1218,7 @@ export function decide({ data, state, cfg, now, test = false }) {
   const { iso: today, min } = now || nowTz(cfg.timezone);
   const tomorrow = addDays(today, 1);
   const messages = [];
-  if (!data || !data.groups[group]) return { messages, state, error: `Группа «${cfg.group}» не найдена в расписании` };
+  if (!data || !data.groups[group]) return { messages, state, error: `Группа ${cfg.group} не найдена в расписании` };
 
   const tagged = (msg, day, kind) => ({ ...msg, tag: `day-${day}`, day, kind });
   if (test) {

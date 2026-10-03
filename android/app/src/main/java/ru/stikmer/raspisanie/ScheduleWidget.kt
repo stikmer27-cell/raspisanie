@@ -105,9 +105,9 @@ object WidgetUpdater {
         for (g in groups) {
             val before = g.first() < first
             val at = out.indexOfFirst { it.slot == 0 && it.pairs.isNotEmpty() && it.pairs.first() > g.last() }.takeIf { it >= 0 } ?: out.size
-            val text = if (!before) "окно" else if (g.size > 1) "пар нет" else "пары нет"
-            out.add(at, Lesson(if (g.size > 1) "${g.first()}–${g.last()}" else "${g.first()}", g,
-                BELLS[g.first()]?.first, BELLS[g.last()]?.second, "— $text", "", false, false, if (before) 1 else 2))
+            val text = if (!before) "Окно" else if (g.size > 1) "Пар нет" else "Пары нет"
+            out.add(at, Lesson(if (g.size > 1) "${g.first()}-${g.last()}" else "${g.first()}", g,
+                BELLS[g.first()]?.first, BELLS[g.last()]?.second, text, "", false, false, if (before) 1 else 2))
         }
         return out
     }
@@ -147,7 +147,7 @@ object WidgetUpdater {
         val label = when (nums.size) {
             0 -> "·"
             1 -> nums[0].toString()
-            else -> "${nums.first()}–${nums.last()}"
+            else -> "${nums.first()}-${nums.last()}"
         }
         val start = l.optString("start").takeIf { it.isNotEmpty() && it != "null" }
         val end = l.optString("end").takeIf { it.isNotEmpty() && it != "null" }
@@ -221,7 +221,7 @@ object WidgetUpdater {
         }
 
         if (group.isEmpty()) return empty("Расписание", "Открой приложение и впиши свою группу")
-        if (data == null) return empty("Расписание", "Открой приложение — оно скачает расписание")
+        if (data == null) return empty("Расписание", "Открой приложение, оно скачает расписание")
         val days = groupObj?.optJSONObject("days") ?: return empty("Расписание", "Группа не найдена в расписании")
 
         // какой день показать: сегодня — до часа после последней пары, потом следующий учебный
@@ -240,7 +240,7 @@ object WidgetUpdater {
 
         val arr = days.optJSONArray(day.toString()) ?: return empty(dayTitle(day, today, compact), "Расписание ещё не выложили")
         val lessons = withSlots(lessonsOf(arr))
-        if (lessons.isEmpty()) return empty(dayTitle(day, today, compact), "Пар нет — можно отдыхать")
+        if (lessons.isEmpty()) return empty(dayTitle(day, today, compact), "Пар нет, можно отдыхать")
 
         v.setTextViewText(R.id.w_day, dayTitle(day, today, compact))
         v.setViewVisibility(R.id.w_empty, View.GONE)
@@ -368,7 +368,7 @@ object WidgetUpdater {
         val hidden = lessons.indices.count { it !in shown && lessons[it].slot == 0 }
         if (hidden > 0) {
             v.setViewVisibility(R.id.w_more, View.VISIBLE)
-            v.setTextViewText(R.id.w_more, "и ещё $hidden — открыть")
+            v.setTextViewText(R.id.w_more, "и ещё $hidden в приложении")
         } else {
             v.setViewVisibility(R.id.w_more, View.GONE)
         }
