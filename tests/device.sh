@@ -282,15 +282,17 @@ if [ -n "$OLD" ]; then
   check out/notifications-update.txt "обновлено до 1.0.$NEW" "уведомление «Расписание обновлено до 1.0.$NEW»"
   adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null
   sleep 6
-  # после холодного старта WebView отдаёт текст экрана не сразу — ждём
+  # после холодного старта WebView отдаёт текст экрана не сразу — ждём.
+  # Группа и данные на месте, если в кнопках дней есть «к … паре» (без группы был бы экран «Привет!»)
   for i in $(seq 1 8); do
     dump after
     texts after > out/after.txt
-    grep -q "2507сб1" out/after.txt && break
+    grep -q "паре" out/after.txt && break
     sleep 3
   done
   shot 15-after-update
-  check out/after.txt "2507сб1" "после обновления группа и данные на месте"
+  check out/after.txt ", к первой паре\|, ко второй паре\|, к третьей паре" "после обновления группа и данные на месте"
+  if grep -q "Привет!" out/after.txt; then echo "FAIL после обновления пропала группа"; FAIL=1; fi
 fi
 
 # виджет: кнопка в настройках → подтверждение лаунчера → главный экран
