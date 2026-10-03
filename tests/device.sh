@@ -33,6 +33,21 @@ EOF
 }
 texts() { python3 -c "import re,sys,html; x=open('out/$1.xml',encoding='utf-8').read(); print('\n'.join(html.unescape(t) for t in re.findall(r' text=\"([^\"]+)\"', x)))"; }
 check() { if grep -q -- "$2" "$1"; then echo "OK   $3"; else echo "FAIL $3"; FAIL=1; fi; }
+# нажать элемент, сначала прокрутив страницу, чтобы он был на экране (не под нижними вкладками)
+tap_visible() {
+  SIZE=$(adb shell wm size | tail -n 1 | grep -o '[0-9]*x[0-9]*')
+  W=${SIZE%x*}; H=${SIZE#*x}
+  for i in 1 2 3 4 5; do
+    XY=$(center "$1")
+    [ -z "$XY" ] && return 1
+    Y=${XY#* }
+    if [ "$Y" -ge $((H * 3 / 4)) ]; then adb shell input swipe $((W / 2)) $((H * 2 / 3)) $((W / 2)) $((H / 3)) 400
+    elif [ "$Y" -le $((H / 5)) ]; then adb shell input swipe $((W / 2)) $((H / 3)) $((W / 2)) $((H * 2 / 3)) 400
+    else adb shell input tap $XY; return 0; fi
+    sleep 1.5
+  done
+  return 1
+}
 
 adb logcat -c
 # есть тестовая «старая» версия (номер 1) — ставим её: в конце она должна сама обновиться до релиза
@@ -218,9 +233,7 @@ check out/fgroup.txt "Твоя группа В2507сб1" "поиск: своя �
 # открываем день, где у этой группы есть пары (кнопка дня подписана «…, к первой паре, 4 пары»)
 XY=$(center 'паре, [0-9]')
 [ -n "$XY" ] && adb shell input tap $XY && sleep 2
-XY=$(center 'все пары преподавателя')
-if [ -n "$XY" ]; then
-  adb shell input tap $XY
+if tap_visible 'все пары преподавателя'; then
   sleep 3
   dump teacher
   texts teacher > out/teacher.txt
@@ -243,6 +256,11 @@ dump back3
 texts back3 > out/back3.txt
 check out/back3.txt "Расписание занятий" "«Назад» из поиска: приложение открыто"
 if grep -q "Расписание группы" out/back3.txt; then echo "FAIL после поиска осталось чужое расписание"; FAIL=1; else echo "OK   после поиска снова своё расписание, не чужой группы"; fi
+# если что-то пошло не так и приложение свернулось, открываем снова, чтобы остальные проверки шли дальше
+if ! grep -q "Расписание занятий" out/back3.txt; then
+  adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null
+  sleep 5
+fi
 check out/back3.txt "сентября\|октября\|ноября\|декабря" "«Назад» из поиска: снова своё расписание"
 
 # переключатель чёрной темы в шапке
