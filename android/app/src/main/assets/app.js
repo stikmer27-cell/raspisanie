@@ -2,6 +2,8 @@
 // здесь только показываем их и общаемся с Android через window.Android.
 import { STICKERS, ICONS } from './stickers.js';
 import { normGroup, nowTz, addDays, weekday, toMin, dayPlan, lateNote, toPair } from './engine.js';
+import { extrasFor, groupSubjects, materialsFor } from './extras.js';
+import { newsHtml, sessionHtml, freshNewsCard, debtsPromptCard } from './sections.js';
 
 const $ = (s) => document.querySelector(s);
 const WD = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
@@ -9,7 +11,7 @@ const WD_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
 const native = window.Android;
-const S = { cfg: {}, data: null, group: null, sel: null, manual: false, loaded: false };
+const S = { cfg: {}, data: null, extras: null, group: null, sel: null, manual: false, loaded: false, tab: 'schedule', debtsEdit: false, draft: new Set() };
 
 // ---------------------------------------------------------------- утилиты
 
@@ -182,13 +184,39 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if
 // ---------------------------------------------------------------- данные
 
 async function loadData() {
-  try {
-    const r = await fetch('/data/schedule.json?t=' + Date.now(), { cache: 'no-store' });
-    S.data = r.ok ? await r.json() : null;
-  } catch {
-    S.data = null;
-  }
+  const get = async (name) => {
+    try {
+      const r = await fetch(`/data/${name}?t=${Date.now()}`, { cache: 'no-store' });
+      return r.ok ? await r.json() : null;
+    } catch {
+      return null;
+    }
+  };
+  [S.data, S.extras] = await Promise.all([get('schedule.json'), get('extras.json')]);
   S.loaded = true;
+}
+
+// ---------------------------------------------------------------- прочитанное (только на этом телефоне)
+
+function readSet(key) {
+  try { const v = localStorage.getItem(key); return v === null ? null : new Set(JSON.parse(v)); } catch { return new Set(); }
+}
+function saveSet(key, set) {
+  try { localStorage.setItem(key, JSON.stringify([...set].slice(-300))); } catch { /* приватный режим */ }
+}
+/** Что есть сейчас для группы и что из этого ещё не видел. Самый первый раз всё считаем прочитанным. */
+function extrasState() {
+  const { iso: today } = now();
+  const mine = extrasFor(S.extras, S.data, S.group, today);
+  const newsKeys = mine.news.map((n) => n.url);
+  const sessKeys = [...mine.session.filter((f) => f.kind === 'exam' || f.kind === 'retake').map((f) => 's:' + f.url), ...mine.questions.map((q) => 'q:' + q.url)];
+  let readNews = readSet('newsRead');
+  let readSess = readSet('sessionSeen');
+  if (S.extras && readNews === null) { readNews = new Set(newsKeys); saveSet('newsRead', readNews); }
+  if (S.extras && readSess === null) { readSess = new Set(sessKeys); saveSet('sessionSeen', readSess); }
+  const unreadNews = new Set(newsKeys.filter((k) => !(readNews || new Set()).has(k)));
+  const unseenSess = new Set(sessKeys.filter((k) => !(readSess || new Set()).has(k)));
+  return { mine, today, unreadNews, unseenSess, newsKeys, sessKeys };
 }
 
 // пока идёт проверка — сами следим за её окончанием (на случай, если событие от Android потерялось)
@@ -246,7 +274,10 @@ window.onNative = async (type, arg) => {
     render(null);
   } else if (type === 'open') {
     S.sel = arg;
+    S.tab = 'schedule';
     render('fade');
+  } else if (type === 'tab') {
+    setTab(arg);
   } else if (type === 'settings') {
     readCfg();
     paintTheme();
@@ -297,6 +328,7 @@ function updateState(u) {
 window.handleBack = () => {
   const open = [...document.querySelectorAll('dialog[open]')].pop();
   if (open) { closeSheet(open); return true; }
+  if (S.tab !== 'schedule' && S.cfg.group) { setTab('schedule'); return true; } // «Назад» с вкладки — к расписанию
   return false;
 };
 
@@ -446,6 +478,25 @@ function render(anim) {
   const g = S.data && S.data.groups[S.group];
   $('#groupName').textContent = g ? g.name : (S.cfg.group || 'Группа?');
   const view = $('#view');
+  const ex = extrasState();
+  renderTabs(ex);
+  document.body.classList.toggle('tab-other', S.tab !== 'schedule');
+
+  // вкладки «Новости» и «Сессия»
+  if (S.tab === 'news') {
+    if (setHtml(view, 'view', newsHtml(ex.mine.news, { unread: ex.unreadNews, today: ex.today, loaded: !!S.extras }), !!anim)) animate(view, anim);
+    saveSet('newsRead', new Set([...(readSet('newsRead') || []), ...ex.newsKeys])); // открыл — значит, видел
+    renderFoot();
+    return;
+  }
+  if (S.tab === 'session') {
+    const debts = S.cfg.debts || [];
+    const html = sessionHtml(ex.mine, { debts, subjects: groupSubjects(S.data, S.group, ex.mine.questions), editing: S.debtsEdit, draft: S.draft, unseen: ex.unseenSess, today: ex.today, loaded: !!S.extras });
+    if (setHtml(view, 'view', html, !!anim)) animate(view, anim);
+    saveSet('sessionSeen', new Set([...(readSet('sessionSeen') || []), ...ex.sessKeys]));
+    renderFoot();
+    return;
+  }
 
   if (!S.data) {
     setHtml($('#days'), 'days', '');
@@ -478,9 +529,48 @@ function render(anim) {
   const selBtn = document.querySelector(`.day[data-day="${S.sel}"]`);
   if (selBtn && anim) selBtn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
 
+  // над расписанием: свежая новость и вопрос «остались долги?» после выкладки пересдач
+  let top = freshNewsCard(ex.mine.news, ex.unreadNews, today, addDays(today, -1));
+  const retakes = ex.mine.session.filter((f) => f.kind === 'retake').map((f) => f.url).sort().join('|');
+  if (retakes && S.cfg.debtsAsked !== retakes && !(S.cfg.debts || []).length) top += debtsPromptCard();
+
   // раз в 30 секунд экран пересчитывается — но в DOM уходит, только если что-то правда поменялось
-  if (setHtml(view, 'view', dayHtml(g, S.sel), !!anim)) animate(view, anim);
+  if (setHtml(view, 'view', top + dayHtml(g, S.sel), !!anim)) animate(view, anim);
   renderFoot();
+}
+
+/** Нижние вкладки: какая выбрана и сколько нового. */
+function renderTabs(ex) {
+  for (const b of document.querySelectorAll('#tabs .tab')) {
+    const on = b.dataset.tab === S.tab;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+    const n = b.dataset.tab === 'news' ? ex.unreadNews.size : b.dataset.tab === 'session' ? ex.unseenSess.size : 0;
+    const badge = b.querySelector('.badge');
+    badge.hidden = !n || on;
+    badge.textContent = n > 9 ? '9+' : String(n);
+  }
+}
+
+function setTab(tab) {
+  if (!['schedule', 'news', 'session'].includes(tab) || tab === S.tab) return;
+  S.tab = tab;
+  S.debtsEdit = false;
+  window.scrollTo(0, 0);
+  render('fade');
+}
+
+/** Ключ «на какие пересдачи уже ответили» — спросим заново, когда выложат новые. */
+const retakesKey = () => extrasState().mine.session.filter((f) => f.kind === 'retake').map((f) => f.url).sort().join('|');
+
+function saveDebts(list) {
+  native.setDebts(JSON.stringify(list));
+  native.setDebtsAsked(retakesKey() || 'none');
+  S.cfg.debts = list;
+  S.cfg.debtsAsked = retakesKey() || 'none';
+  S.debtsEdit = false;
+  render(null);
+  toast(list.length ? `Готово! Напомню о пересдаче: ${list.join(', ')}` : 'Отлично, долгов нет 🎉');
 }
 
 const lastHtml = {};
@@ -588,6 +678,9 @@ function lessonCard(l, isToday, min, isNext, i) {
     kind && `<span class="pill ${kind[0]}">${esc(kind[1])}</span>`,
     l.teacher && `<span class="ic">${ICONS.user}${esc(l.teacher)}</span>`,
     l.room && `<span class="ic room">${ICONS.pin}${esc(l.room)}</span>`,
+    // пособия колледжа по этому предмету (с сайта)
+    ...materialsFor(l.subject, (S.extras && S.extras.materials) || []).slice(0, 2).map((m) =>
+      `<button type="button" class="ic mat press" data-act="open-url" data-url="${esc(m.url)}">${ICONS.book}${esc(m.title.replace(/^учебн\S*\s+(методическ\S*\s+)?пособие\s*/i, ''))}</button>`),
   ].filter(Boolean).join('');
   return `<article class="${cls.filter(Boolean).join(' ')}" style="--i:${i}">
     <div class="when"><div class="num">${num}</div><div class="t">${time}</div></div>
@@ -716,6 +809,15 @@ document.addEventListener('click', (e) => {
   }
   const day = e.target.closest('.day');
   if (day) { selectDay(day.dataset.day); return; }
+  const tabBtn = e.target.closest('[data-tab]');
+  if (tabBtn) { setTab(tabBtn.dataset.tab); return; }
+  const debt = e.target.closest('[data-debt]');
+  if (debt) {
+    const s = debt.dataset.debt;
+    if (S.draft.has(s)) S.draft.delete(s); else S.draft.add(s);
+    render(null);
+    return;
+  }
   const grp = e.target.closest('[data-group], [data-pick]');
   if (grp) { chooseGroup(grp.dataset.group || grp.dataset.pick); return; }
   const act = e.target.closest('[data-act]');
@@ -729,6 +831,14 @@ document.addEventListener('click', (e) => {
   else if (a === 'notif') native.requestNotifications();
   else if (a === 'battery') native.openBatterySettings();
   else if (a === 'test') { native.testNotification(); toast('Сейчас придёт тестовое уведомление'); }
+  else if (a === 'open-url') native.openUrl(act.dataset.url)
+  else if (a === 'debts-edit' || a === 'debts-mark') {
+    S.draft = new Set(S.cfg.debts || []);
+    S.debtsEdit = true;
+    if (S.tab !== 'session') { S.tab = 'session'; window.scrollTo(0, 0); render('fade'); } else render(null);
+  } else if (a === 'debts-cancel') { S.debtsEdit = false; render(null); }
+  else if (a === 'debts-save') saveDebts([...S.draft]);
+  else if (a === 'debts-none') saveDebts([]);
   else if (a === 'update-check') {
     if (native.checkUpdate) native.checkUpdate();
     S.cfg.update = { ...(S.cfg.update || {}), busy: true };
@@ -752,6 +862,14 @@ document.addEventListener('click', (e) => {
 });
 
 $('#groupBtn').addEventListener('click', openGroups);
+// «Другой предмет» в списке долгов
+document.addEventListener('submit', (e) => {
+  if (!e.target.matches('[data-form="debt-add"]')) return;
+  e.preventDefault();
+  const input = $('#debtOther');
+  const v = input.value.trim().replace(/\s+/g, ' ');
+  if (v.length >= 2) { S.draft.add(v[0].toUpperCase() + v.slice(1)); render(null); }
+});
 $('#themeBtn').addEventListener('click', (e) => setTheme(isDark() ? 'light' : 'dark', e.currentTarget));
 $('#groupSearch').addEventListener('input', (e) => fillGroups(e.target.value));
 $('#refreshBtn').addEventListener('click', () => refresh(true));
@@ -791,7 +909,7 @@ document.addEventListener('touchend', (e) => {
     } else {
       pull.style.height = '0';
     }
-  } else if (mode === 'x' && Math.abs(dx) > 60 && S.data && S.data.groups[S.group]) {
+  } else if (mode === 'x' && Math.abs(dx) > 60 && S.tab === 'schedule' && S.data && S.data.groups[S.group]) {
     const days = dayList();
     const i = days.indexOf(S.sel) + (dx < 0 ? 1 : -1);
     if (i >= 0 && i < days.length) selectDay(days[i]);
@@ -806,6 +924,7 @@ setInterval(() => { if (S.data && document.visibilityState === 'visible') render
 readCfg();
 paintTheme();
 S.sel = (native.takeOpenDay && native.takeOpenDay()) || null; // открыли из уведомления — сразу нужный день
+S.tab = (native.takeOpenTab && native.takeOpenTab()) || 'schedule'; // или вкладку «Новости» / «Сессия»
 await loadData();
 render('fade');
 // проверка сайта при открытии: без данных — сразу, иначе чуть позже, чтобы не мешать первой отрисовке

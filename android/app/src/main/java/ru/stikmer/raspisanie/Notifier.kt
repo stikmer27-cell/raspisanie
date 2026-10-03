@@ -15,6 +15,8 @@ object Notifier {
     private const val CH_CHANGES = "changes"
     private const val CH_SERVICE = "service"
     private const val CH_UPDATES = "updates"
+    private const val CH_NEWS = "news"
+    private const val CH_SESSION = "session"
     const val SERVICE_ID = 900
     private const val UPDATED_ID = 5
     private const val UPDATE_ASK_ID = 6
@@ -36,6 +38,16 @@ object Notifier {
             NotificationChannel(CH_SERVICE, "Фоновая проверка", NotificationManager.IMPORTANCE_MIN).apply {
                 description = "Короткое служебное уведомление во время проверки сайта"
                 setShowBadge(false)
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_NEWS, "Новости колледжа", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Новые новости и объявления на сайте ВКИ НГУ"
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_SESSION, "Сессия и пересдачи", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Выложили расписание экзаменов, пересдач или вопросы к зачётам для твоей группы"
             },
         )
         nm.createNotificationChannel(
@@ -98,16 +110,25 @@ object Notifier {
         val id = when (kind) {
             "change" -> 2
             "test" -> 3
+            "news" -> 10
+            "session" -> 11
             else -> 1
         }
         val open = Intent(ctx, MainActivity::class.java)
-            .putExtra("day", day)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        // новости и сессия открываются на своей вкладке, расписание — на нужном дне
+        if (kind == "news" || kind == "session") open.putExtra("tab", kind) else open.putExtra("day", day)
         val pi = PendingIntent.getActivity(
             ctx, (tag + id).hashCode(), open,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(ctx, if (kind == "change") CH_CHANGES else CH_DAILY)
+        val channel = when (kind) {
+            "change" -> CH_CHANGES
+            "news" -> CH_NEWS
+            "session" -> CH_SESSION
+            else -> CH_DAILY
+        }
+        val n = NotificationCompat.Builder(ctx, channel)
             .setSmallIcon(R.drawable.ic_stat)
             .setColor(ACCENT)
             .setContentTitle(title)
@@ -116,7 +137,7 @@ object Notifier {
             .setContentIntent(pi)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setPriority(if (kind == "change") NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(if (kind == "change" || kind == "session") NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
             .build()
         try {
             nmc.notify(tag, id, n)

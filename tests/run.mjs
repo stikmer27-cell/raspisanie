@@ -180,6 +180,66 @@ const L = (pairs, extra = {}) => ({ pairs, start: engine.BELLS[pairs[0]][0], end
     'убрали первую пару — «теперь ко второй паре» в заголовке изменения', msg && `${msg.title} / ${msg.body.split('\n')[0]}`);
 }
 
+// ---------------------------------------------------------------- 4в. новости и сессия (страницы сайта сохранены 04.10.2026)
+console.log('4в. Новости и сессия');
+{
+  const X = await import('file://' + path.join(HERE, '..', 'android', 'app', 'src', 'main', 'assets', 'extras.js').replace(/\\/g, '/'));
+  const page = (n) => fs.readFileSync(path.join(HERE, 'fixtures-extras', n), 'utf8');
+  const news = X.parseNews(page('news.html'), 'news');
+  ok(news.length >= 10 && news[0].date === '2026-09-28' && news[0].title === 'Изменение режима работы ВКИ НГУ 29 сентября' && news[0].text.includes('не работает'),
+    'новости: дата, заголовок и текст', news[0] && `${news[0].date} ${news[0].title} — ${news[0].text.slice(0, 50)}`);
+  const adv = X.parseNews(page('advert.html'), 'advert');
+  ok(adv.length >= 3 && adv.every((a) => /^\d{4}-\d{2}-\d{2}$/.test(a.date) && a.title), 'объявления: даты и заголовки', adv.map((a) => a.date).join(','));
+  const exams = X.parseFiles(page('exams.html'));
+  const questions = X.parseFiles(page('questions.html'));
+  const materials = X.parseFiles(page('materials.html'));
+  ok(exams.length >= 10 && !exams.some((f) => /Вакансии|Памятка/.test(f.title)), 'сессия: файлы только из содержимого страницы', exams.length + ' файлов');
+  ok(materials.some((m) => /Тригонометрия/.test(m.title)) && !materials.some((m) => /Вакансии/.test(m.title)), 'пособия: без ссылок из меню сайта', materials.length + ' файлов');
+
+  for (const [text, group, want] of [
+    ['Химия (2501а, 2508а, 2513а, 2507а-д) ДЗ', '2507в1', true],
+    ['Химия (2501а, 2508а, 2513а, 2507а-д) ДЗ', '2601а1', false],
+    ['(2401а-б, 2407а-и, 2408а, 2507са-сб) КР', '2507сб1', true],
+    ['(2401а-б, 2407а-и, 2408а, 2507са-сб) КР', '2507св1', false],
+    ['пересдачи с комиссией 1 курса СПО (2507са-св1)', '2507сб2', true],
+    ['ГРУПП: 2507а, 2508б, 2501а,б, 2513 а.', '2501б1', true],
+    ['Иностранный язык (2501а, 2507а-д, 2508а, 2513a) ДЗ', '2513а2', true],
+    ['для групп 2613а-д', '2613в1', true],
+    ['для групп 2613а-в', '2613г1', false],
+  ]) ok(X.mentionsGroup(text, group) === want, `группа ${group} ${want ? 'есть' : 'нет'} в «${text.slice(0, 40)}»`);
+  ok(JSON.stringify(X.courseOf('Расписание студентов 3 курса СПО (после 9 класса) на 03.10.26')) === '{"nums":[3],"prog":"СПО","after":"9"}'
+    && JSON.stringify(X.courseOf('для студентов 1,2 курса БО').nums) === '[1,2]', 'курс в названии файла');
+
+  // данные: группа 2601а1 — 1 курс БО; прошлогодние пересдачи «1 курса БО» — для групп 2507…, не для неё
+  const data = { sources: [{ title: 'Расписание студентов 1 курса БО на 03.10.26', url: '' }], groups: { '2601а1': { name: '2601а1', source: 0, days: {} }, '2507в1': { name: '2507в1', source: 0, days: {} } } };
+  const ex = { news, adverts: adv, exams, questions, materials, pdf: {} };
+  const retake1 = exams.find((f) => f.title === 'Расписание пересдач 1 курса БО');
+  ex.pdf[retake1.url] = { groups: ['2507а', '2507в', '2508а', '2513а'], hits: ['Химия'], debtKey: 'Химия' };
+  const mine = X.extrasFor(ex, data, '2601а1', '2026-10-04');
+  ok(!mine.session.some((f) => f.kind === 'retake' || f.kind === 'exam') && !mine.questions.length, '1 курс 2601а1: чужие (прошлогодние) пересдачи и вопросы не показываются', JSON.stringify(mine.session.map((f) => f.title)));
+  ok(!mine.session.some((f) => /06\.05\.2026|25\.05\.2026/.test(f.title)), 'приказы прошлого учебного года не показываются');
+  const other = X.extrasFor(ex, data, '2507в1', '2026-10-04');
+  ok(other.session.some((f) => f.url === retake1.url && f.hits.includes('Химия')) && other.questions.some((q) => q.subject === 'Химия' && q.kind === 'дифф. зачёт'),
+    'группа 2507в1: её пересдачи (по группам внутри PDF) и вопросы к зачётам', JSON.stringify(other.questions.slice(0, 2)));
+  ok(X.materialsFor('Математика', materials).length === 2 && !X.materialsFor('Программирование микроконтроллеров', materials).length && X.materialsFor('Основы алгоритмизации и программирования', materials).length >= 1,
+    'пособия подбираются к своим предметам');
+
+  // уведомления: первый раз — тишина; потом новая новость и новые вопросы для группы — приходят
+  let st = {};
+  let r = X.decideExtras({ extras: ex, data, state: st, cfg: { group: '2507в1' }, today: '2026-10-04' });
+  ok(r.messages.length === 0, 'первая загрузка новостей и сессии — без потока старых уведомлений');
+  const ex2 = JSON.parse(JSON.stringify(ex));
+  ex2.news.unshift({ url: 'https://ci.nsu.ru/news/x/', date: '2026-10-04', title: '5 октября занятия по расписанию', text: 'Текст', kind: 'news' });
+  ex2.questions.push({ url: 'https://ci.nsu.ru/upload/q/Физика (2507а-д) Э.pdf', title: 'Физика (2507а)', path: [] });
+  r = X.decideExtras({ extras: ex2, data, state: r.state, cfg: { group: '2507в1', debts: ['Химия'] }, today: '2026-10-04' });
+  ok(r.messages.length === 2 && r.messages.some((m) => m.kind === 'news' && m.title.includes('5 октября')) && r.messages.some((m) => m.kind === 'session' && m.title.includes('Физика')),
+    'новая новость и новые вопросы — уведомления', r.messages.map((m) => m.title).join(' | '));
+  r = X.decideExtras({ extras: ex2, data, state: r.state, cfg: { group: '2507в1' }, today: '2026-10-04' });
+  ok(r.messages.length === 0, 'повторно не присылает');
+  r = X.decideExtras({ extras: ex2, data, state: r.state, cfg: { group: '2601а1' }, today: '2026-10-04' });
+  ok(r.messages.length === 0, 'после смены группы — без старых уведомлений');
+}
+
 // ---------------------------------------------------------------- 4б. старый WebView
 console.log('4б. Старый WebView (Chrome 113) с нашими полифилами');
 {

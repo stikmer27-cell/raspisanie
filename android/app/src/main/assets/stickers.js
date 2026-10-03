@@ -108,4 +108,10 @@ export const ICONS = {
   warn: icon('M12 3l10 18H2zM12 10v4M12 17.5v.01', 22),
   bolt: icon('M13 2L4 14h7l-1 8 9-12h-7z', 18),
   file: icon('M14 3H6v18h12V7zM14 3v4h4', 16),
+  // нижние вкладки
+  calendar: icon('M4 6h16v15H4zM4 10h16M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2', 22),
+  news: icon('M4 5h13v14a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2zM17 9h3v10a2 2 0 0 1-4 0M7 9h7M7 13h7M7 16h4', 22),
+  cap: icon('M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5M22 9v6', 22),
+  book: icon('M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21a2 2 0 0 1 2-2h13', 15),
+  arrow: icon('M7 17L17 7M9 7h8v8', 15),
 };

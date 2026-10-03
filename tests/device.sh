@@ -171,6 +171,29 @@ texts afterback > out/afterback.txt
 if grep -q "Когда присылать" out/afterback.txt; then echo "FAIL «Назад» не закрыл шторку"; FAIL=1; else echo "OK   «Назад» закрывает шторку"; fi
 check out/afterback.txt "Расписание занятий" "после «Назад» приложение осталось открытым"
 
+# нижние вкладки: «Новости» и «Сессия» (данные с сайта колледжа подтягивает фоновая проверка)
+XY=$(center '^Новости$')
+adb shell input tap $XY
+sleep 2
+dump news
+texts news > out/news.txt
+shot 06b-news
+check out/news.txt "Новости колледжа" "вкладка «Новости» открывается"
+check out/news.txt "Читать на сайте" "новости колледжа загружены с сайта"
+XY=$(center '^Сессия$')
+adb shell input tap $XY
+sleep 2
+dump sess
+texts sess > out/sess.txt
+shot 06c-session
+check out/sess.txt "Остались несданные предметы\|Слежу за пересдачами" "вкладка «Сессия»: вопрос про долги"
+check out/sess.txt "Пособия колледжа" "вкладка «Сессия»: пособия колледжа"
+adb shell input keyevent 4
+sleep 2
+dump back2
+texts back2 > out/back2.txt
+check out/back2.txt "сентября\|октября\|ноября\|декабря" "«Назад» с вкладки — снова расписание"
+
 # переключатель чёрной темы в шапке
 switch_state() {
   dump sw

@@ -3,6 +3,7 @@ package ru.stikmer.raspisanie
 import android.content.Context
 import android.os.PowerManager
 import androidx.core.app.NotificationManagerCompat
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -81,6 +82,25 @@ object Prefs {
     fun setOpenDay(day: String?) { openDay = day }
     fun takeOpenDay(): String? = openDay.also { openDay = null }
 
+    private var openTab: String? = null
+    fun setOpenTab(tab: String?) { openTab = tab }
+    fun takeOpenTab(): String? = openTab.also { openTab = null }
+
+    // ---- сессия: несданные предметы (чтобы напомнить о пересдаче) и «уже спросили»
+    fun debts(ctx: Context): JSONArray = try {
+        JSONArray(sp(ctx).getString("debts", "[]"))
+    } catch (e: Exception) {
+        JSONArray()
+    }
+    fun setDebts(ctx: Context, json: String) {
+        val arr = try { JSONArray(json) } catch (e: Exception) { return }
+        val clean = JSONArray()
+        for (i in 0 until minOf(arr.length(), 30)) arr.optString(i).trim().take(120).takeIf { it.isNotEmpty() }?.let { clean.put(it) }
+        sp(ctx).edit().putString("debts", clean.toString()).apply()
+    }
+    fun debtsAsked(ctx: Context): String = sp(ctx).getString("debtsAsked", "") ?: ""
+    fun setDebtsAsked(ctx: Context, key: String) = sp(ctx).edit().putString("debtsAsked", key.take(500)).apply()
+
     /** Настройки для движка (engine.js / decide). */
     fun engineCfg(ctx: Context): JSONObject = JSONObject()
         .put("group", group(ctx))
@@ -88,6 +108,7 @@ object Prefs {
         .put("morning_time", morning(ctx))
         .put("morning_until", MORNING_UNTIL)
         .put("timezone", TIMEZONE)
+        .put("debts", debts(ctx))
 
     /** Всё, что нужно интерфейсу. */
     fun configJson(ctx: Context): String {
@@ -108,12 +129,13 @@ object Prefs {
             .put("theme", theme(ctx))
             .put("systemDark", systemDark(ctx))
             .put("update", updateJson(ctx))
+            .put("debtsAsked", debtsAsked(ctx))
             .toString()
     }
 
     fun dataDir(ctx: Context): File = File(ctx.filesDir, "data").apply { mkdirs() }
 
-    private val FILES = setOf("schedule.json", "cache.json", "state.json")
+    private val FILES = setOf("schedule.json", "cache.json", "state.json", "extras.json")
 
     fun dataFile(ctx: Context, name: String): File? =
         if (name in FILES) File(dataDir(ctx), name) else null

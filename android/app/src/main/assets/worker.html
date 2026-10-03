@@ -6,6 +6,7 @@
 <script type="module">
 import './polyfills.js'; // до pdf.js: старый WebView (Chrome < 128) без них не разбирает PDF
 import { buildSchedule, decide, nowTz } from './engine.js';
+import { buildExtras, decideExtras } from './extras.js';
 
 // pdf.js (1,8 МБ) грузим, только когда на сайте появился новый PDF — обычная проверка без него
 // в разы легче и не тормозит телефон. pdf.js работает прямо на этой странице, без отдельного Worker.
@@ -32,12 +33,25 @@ const net = async (url) => {
 };
 const fetchText = async (url) => (await net(url)).text();
 const fetchBytes = async (url) => new Uint8Array(await (await net(url)).arrayBuffer());
+// текст PDF (файлы сессии: какие в них группы и предметы)
+const pdfText = async (url) => {
+  const lib = await pdfjs();
+  const task = lib.getDocument({ data: await fetchBytes(url), verbosity: 0, isEvalSupported: false, disableFontFace: true });
+  try {
+    const doc = await task.promise;
+    let text = '';
+    for (let p = 1; p <= doc.numPages; p++) text += (await (await doc.getPage(p)).getTextContent()).items.map((i) => i.str).join(' ') + '\n';
+    return text;
+  } finally {
+    await task.destroy();
+  }
+};
 
 async function main() {
   const input = JSON.parse(Bridge.input());
   const cfg = input.cfg;
   try {
-    const [prev, cache, state] = await Promise.all([getJSON('/data/schedule.json'), getJSON('/data/cache.json'), getJSON('/data/state.json')]);
+    const [prev, cache, state, prevExtras] = await Promise.all([getJSON('/data/schedule.json'), getJSON('/data/cache.json'), getJSON('/data/state.json'), getJSON('/data/extras.json')]);
     const now = nowTz(cfg.timezone);
 
     let data, newCache = null, fresh = 0, errors = [], offline = false;
@@ -58,6 +72,19 @@ async function main() {
 
     for (const err of errors) console.error('schedule:', err);
     const res = decide({ data, state: state || { notified: {} }, cfg, now, test: input.mode === 'test' });
+
+    // новости и сессия — отдельно: их сбой никогда не мешает расписанию
+    if (!offline && input.mode !== 'test') {
+      try {
+        const ex = await buildExtras({ fetchText, pdfText, prev: prevExtras, group: cfg.group, debts: cfg.debts || [] });
+        for (const err of ex.errors) console.warn('extras:', err);
+        if (JSON.stringify(ex.extras) !== JSON.stringify(prevExtras)) Bridge.save('extras.json', JSON.stringify(ex.extras));
+        const more = decideExtras({ extras: ex.extras, data, state: res.state, cfg, today: now.iso });
+        res.messages.push(...more.messages);
+      } catch (e) {
+        console.warn('extras failed:', String((e && e.message) || e));
+      }
+    }
     // файлы — строками, как есть (без пересборки JSON на стороне Android)
     if (changed) Bridge.save('schedule.json', JSON.stringify(data));
     // кэш разобранных PDF (~0,5 МБ) переписываем, только если что-то разобрано заново или файл пропал с сайта

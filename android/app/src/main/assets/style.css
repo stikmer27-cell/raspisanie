@@ -329,6 +329,76 @@ main { padding: 4px 16px 8px; min-height: 60vh; position: relative; }
 .update-bar.ask .btn { background: var(--accent); color: var(--accent-text); }
 .update-bar .x { border: 0; background: transparent; color: var(--muted); width: 30px; height: 30px; border-radius: 10px; font-size: 14px; flex-shrink: 0; }
 
+/* ---------- нижние вкладки: Расписание · Новости · Сессия */
+body { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  display: flex; justify-content: center; gap: 6px;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
+}
+.tabs .tab {
+  flex: 1; max-width: 170px; position: relative;
+  border: 0; background: transparent; border-radius: 14px; padding: 6px 4px 5px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  color: var(--muted); font-size: 12px; font-weight: 650;
+}
+.tabs .tab.on { color: var(--accent); background: var(--accent-soft); }
+.tabs .badge {
+  position: absolute; top: 3px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: 9px; background: var(--danger); color: #fff; font: 700 10.5px/17px system-ui, sans-serif; text-align: center;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.onboard .tabs { display: none; }
+.onboard { padding-bottom: 0; }
+.tab-other .days { display: none; }
+
+/* новости, документы сессии — те же карточки, что у пар, но без колонки времени */
+.lesson.news, .lesson.doc { grid-template-columns: 1fr; }
+.lesson.unread { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.news-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.news-text { margin: 0 0 8px; color: var(--muted); font-size: 14.5px; white-space: pre-line; overflow-wrap: anywhere; }
+.link { border: 0; background: none; padding: 4px 0; color: var(--accent); font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
+.sec-title { font-size: 16px; margin: 20px 2px 10px; color: var(--text); }
+.sec-empty { margin: -2px 2px 10px; font-size: 14px; }
+.card-flat.list { padding: 4px 4px; }
+.list-row {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left;
+  border: 0; background: transparent; border-top: 1px solid var(--line); padding: 11px 10px; font-size: 14.5px; color: var(--text);
+}
+.list-row:first-child { border-top: 0; }
+.list-row b { display: block; font-weight: 650; }
+.list-row small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+.list-row span { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.list-row span:has(> b) { display: block; }
+.list-row svg { flex-shrink: 0; color: var(--muted); }
+.list-row.unread b::after { content: " • новое"; color: var(--accent); font-weight: 700; font-size: 12px; }
+.debts h3 { margin-bottom: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; }
+.chip-toggle { border: 1.5px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; padding: 8px 13px; font-weight: 650; font-size: 14px; }
+.chip-toggle.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.chip-toggle.on::before { content: "✓ "; }
+.add-debt { display: flex; gap: 8px; margin: 12px 0 0; }
+.add-debt .search { flex: 1; min-width: 0; padding: 9px 12px; font-size: 14.5px; }
+.add-debt .btn { padding: 9px 13px; font-size: 14px; }
+.ic.mat { border: 0; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; font-weight: 650; }
+.empty.small { padding: 18px 20px 26px; }
+.empty.small .sticker { width: 130px; height: 100px; }
+
+/* карточки над расписанием: свежая новость, «остались долги?» */
+.note-card {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
+  border: 0; border-radius: var(--radius); padding: 12px 14px; margin: 0 0 12px;
+  background: var(--accent-soft); color: var(--accent); animation: cardIn .4s var(--ease) both;
+}
+.note-card svg { flex-shrink: 0; margin-top: 2px; }
+.note-card div { min-width: 0; }
+.note-card b { display: block; color: var(--text); font-size: 15px; }
+.note-card span { display: block; font-size: 13.5px; margin-top: 2px; }
+.note-card .row { margin-top: 10px; }
+.note-card.ask { background: var(--warn-soft); color: var(--warn); }
+.view.no-anim .note-card { animation: none; }
+
 /* ---------- первый вход */
 .onboard #refreshBtn, .onboard #settingsBtn, .onboard .sub-row .chip, .onboard .days, .onboard .foot, .onboard .pull { display: none; }
 .onb { text-align: center; padding: 10px 6px 30px; animation: fadeUp .45s var(--ease) both; }
@@ -405,7 +475,7 @@ main { padding: 4px 16px 8px; min-height: 60vh; position: relative; }
 .foot a { color: var(--accent); text-decoration: none; font-weight: 650; }
 
 .toast {
-  position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 30px); opacity: 0;
+  position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 30px); opacity: 0; /* над вкладками */
   background: var(--text); color: var(--bg); padding: 11px 18px; border-radius: 14px; font-size: 14px;
   max-width: calc(100% - 32px); box-shadow: 0 8px 28px rgba(0,0,0,.22); z-index: 30;
   transition: transform .35s var(--spring), opacity .25s; pointer-events: none;

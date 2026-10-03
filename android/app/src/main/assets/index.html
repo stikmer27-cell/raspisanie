@@ -64,6 +64,18 @@
   <footer class="foot" id="foot"></footer>
   <div class="toast" id="toast" role="status"></div>
 
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Разделы">
+    <button type="button" class="tab press on" role="tab" aria-selected="true" data-tab="schedule">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16v15H4zM4 10h16M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2"/></svg>
+      <span>Расписание</span><i class="badge" hidden></i></button>
+    <button type="button" class="tab press" role="tab" aria-selected="false" data-tab="news">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M4 5h13v14a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2zM17 9h3v10a2 2 0 0 1-4 0M7 9h7M7 13h7M7 16h4"/></svg>
+      <span>Новости</span><i class="badge" hidden></i></button>
+    <button type="button" class="tab press" role="tab" aria-selected="false" data-tab="session">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5M22 9v6"/></svg>
+      <span>Сессия</span><i class="badge" hidden></i></button>
+  </nav>
+
   <dialog id="groupDlg" class="sheet">
     <form method="dialog">
       <div class="grabber"></div>

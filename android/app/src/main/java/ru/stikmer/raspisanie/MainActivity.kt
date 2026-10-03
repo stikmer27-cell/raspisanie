@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Prefs.setOpenDay(intent?.getStringExtra("day"))
+        Prefs.setOpenTab(intent?.getStringExtra("tab"))
 
         web = WebView(this)
         setContentView(web)
@@ -147,6 +148,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent.getStringExtra("day")?.let { js("open", it) }
+        intent.getStringExtra("tab")?.let { js("tab", it) }
     }
 
     override fun onResume() {
@@ -213,6 +215,19 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun takeOpenDay(): String? = Prefs.takeOpenDay()
+
+        @JavascriptInterface
+        fun takeOpenTab(): String? = Prefs.takeOpenTab()
+
+        /** Несданные предметы (JSON-массив) — напомним, когда выложат пересдачи. */
+        @JavascriptInterface
+        fun setDebts(json: String) {
+            Prefs.setDebts(this@MainActivity, json)
+            Scheduler.runNow(this@MainActivity, "check") // сразу посмотреть, есть ли они в уже выложенных пересдачах
+        }
+
+        @JavascriptInterface
+        fun setDebtsAsked(key: String) = Prefs.setDebtsAsked(this@MainActivity, key)
 
         @JavascriptInterface
         fun setGroup(group: String) {

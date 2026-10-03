@@ -909,7 +909,7 @@ export async function parsePdf(pdfjs, bytes, fallbackWeekDate = null) {
 
 // ---------------------------------------------------------------- страница сайта
 
-function unescapeHtml(s) {
+export function unescapeHtml(s) {
   const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', laquo: '«', raquo: '»', ndash: '–', mdash: '—' };
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
     if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1));
