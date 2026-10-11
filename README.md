@@ -1,4 +1,4 @@
-# Расписание ВКИ НГУ — Android-приложение
+# Расписание ВКИ НГУ - Android-приложение
 
 Приложение само скачивает PDF с [ci.nsu.ru/education/schedule](https://ci.nsu.ru/education/schedule/),
 разбирает его прямо на телефоне и присылает уведомления:
