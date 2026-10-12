@@ -819,12 +819,16 @@ export async function parsePdf(pdfjs, bytes, fallbackWeekDate = null) {
       let prev = 0, prevLab = -1;
       for (const s of slots) {
         if (s.num === null) { pending.push(s); continue; }
+        if (pending.length) {
+          if (pageBlocks.length) pageBlocks[pageBlocks.length - 1].slots.push(...pending);
+          else pageBlocks.push({ slots: [...pending], weekday: null, date: null });
+          pending = [];
+        }
         const lab = labelOf(s);
         if (!pageBlocks.length || s.num < prev || (lab >= 0 && prevLab >= 0 && lab !== prevLab)) {
           pageBlocks.push({ slots: [], weekday: null, date: null });
         }
-        pageBlocks[pageBlocks.length - 1].slots.push(...pending, s);
-        pending = [];
+        pageBlocks[pageBlocks.length - 1].slots.push(s);
         prev = s.num;
         prevLab = lab;
       }

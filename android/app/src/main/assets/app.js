@@ -1,4 +1,4 @@
-// Интерфейс приложения. Данные готовит фоновая проверка (worker.html + engine.js),
+﻿// Интерфейс приложения. Данные готовит фоновая проверка (worker.html + engine.js),
 // здесь только показываем их и общаемся с Android через window.Android.
 import { STICKERS, ICONS } from './stickers.js';
 import { normGroup, nowTz, addDays, weekday, toMin, dayPlan, lateNote, toPair } from './engine.js';
@@ -610,7 +610,13 @@ function renderDays(g, days, sel, anim) {
       <span class="wd">${WD_SHORT[weekday(d)]}</span><span class="dn">${dayNum(d)}</span><span class="cnt">${cnt}</span></button>`;
   }).join(''), !!anim);
   const selBtn = document.querySelector(`.day[data-day="${sel}"]`);
-  if (selBtn && anim) selBtn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  if (selBtn && anim) {
+    const daysContainer = document.getElementById('days');
+    if (daysContainer) {
+      const scrollPos = selBtn.offsetLeft - (daysContainer.clientWidth / 2) + (selBtn.clientWidth / 2);
+      daysContainer.scrollTo({ left: scrollPos, behavior: 'smooth' });
+    }
+  }
 }
 
 /** Вкладка «Поиск»: строка поиска, чужая группа или преподаватель. */
@@ -790,7 +796,11 @@ function lessonCard(l, isToday, min, isNext, i) {
     }
   }
   if (l.cancelled) status = `<div class="status"><span class="pill badge-cancel">Отменено</span></div>`;
-  const num = l.pairs.length ? (l.pairs.length > 1 ? `${l.pairs[0]}-${l.pairs[l.pairs.length - 1]}` : l.pairs[0]) : '·';
+    const isRv = (l.subject || l.text).toLowerCase().includes('разговоры о важном');
+    if (isRv) cls.push('rv');
+    const num = l.pairs.length ? (l.pairs.length > 1 ? `-` : l.pairs[0]) : (isRv ? 'РВ' : '•');
+    if (isRv && !l.end) l.end = '08:45';
+    if (isRv && !l.start) l.start = '08:15';
   const time = l.start ? `${l.start}${l.end ? '<br>' + l.end : ''}` : '';
   const kind = kindInfo(l.kind);
   const meta = [

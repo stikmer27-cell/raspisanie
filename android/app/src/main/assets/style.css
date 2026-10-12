@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #f3f5fb;
   --surface: #ffffff;
   --surface-2: #eef1f8;
@@ -604,3 +604,9 @@ h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Стиль для 'Разговоры о важном' */
+.lesson.rv { border: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.lesson.rv .num { font-size: 20px; color: var(--accent); }
+.lesson.rv .t { color: var(--accent); font-weight: 600; opacity: 0.8; }
+
